@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local database, secrets, and uploaded media
+campusvoice.db
+.secret_key
+uploads/
+
+# Environment variables
+.env
+.env.*
+!.env.example
