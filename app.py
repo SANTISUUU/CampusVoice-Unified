@@ -47,7 +47,11 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 SECRET_PATH = os.path.join(BASE_DIR, ".secret_key")
 
-UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+UPLOAD_DIR = (
+    "/tmp/campusvoice-uploads"
+    if os.environ.get("VERCEL")
+    else os.path.join(BASE_DIR, "uploads")
+)
 
 MB = 1024 * 1024
 
