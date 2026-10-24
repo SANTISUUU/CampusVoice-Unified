@@ -88,22 +88,36 @@ CATEGORIES = (
 GUEST_ROLES = ("Student", "Faculty", "Staff", "Guest")
 
 
+
 def load_secret_key():
-    """Use SECRET_KEY if set, otherwise create and reuse a local key file."""
+    # On Vercel, use the configured environment variable.
+    env_key = os.environ.get("SECRET_KEY", "").strip()
 
-    if os.environ.get("SECRET_KEY"):
-        return os.environ["SECRET_KEY"]
+    if env_key:
+        return env_key
 
-    if os.path.exists(SECRET_PATH):
+    # Never try to write a secret file in Vercel's read-only app directory.
+    if os.environ.get("VERCEL"):
+        raise RuntimeError(
+            "SECRET_KEY is missing. Configure it in Vercel Environment Variables."
+        )
+
+    # Local development: reuse the existing secret file if available.
+    if os.path.isfile(SECRET_PATH):
         with open(SECRET_PATH, "r", encoding="utf-8") as file:
-            return file.read().strip()
+            existing_key = file.read().strip()
 
-    key = secrets.token_hex(32)
+        if existing_key:
+            return existing_key
+
+    # Generate and save a secret only for local development.
+    generated_key = secrets.token_urlsafe(32)
 
     with open(SECRET_PATH, "w", encoding="utf-8") as file:
-        file.write(key)
+        file.write(generated_key)
 
-    return key
+    return generated_key
+
 
 
 app = Flask(
