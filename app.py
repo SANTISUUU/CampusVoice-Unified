@@ -53,7 +53,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
     "SUPABASE_SERVICE_ROLE_KEY", ""
 ).strip()
 
-SUPABASE_BUCKET = "campusvoice-media"
+SUPABASE_BUCKET = "CampusVoice-media"
 
 supabase_client = (
     create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
@@ -216,19 +216,25 @@ def close_db(_error):
 
 
 def init_db():
-    # Local disk uploads are temporary on serverless hosts. Supabase Storage
-    # migration is a separate step; this folder is only for local development.
+    # Local disk uploads are temporary on serverless hosts.
     if not DATABASE_URL:
         raise RuntimeError(
             "DATABASE_URL is missing. Set it in .env before starting CampusVoice."
         )
+
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as db:
-        # Execute one statement at a time for compatibility with PostgreSQL's
-        # prepared-statement protocol.
+
+    with psycopg.connect(
+        DATABASE_URL,
+        row_factory=dict_row,
+    ) as db:
+        # Prevent concurrent instances from initializing the schema together.
+        db.execute("SELECT pg_advisory_xact_lock(20261024, 1)")
+
         for statement in SCHEMA.split(";"):
             if statement.strip():
                 db.execute(statement)
+
         db.commit()
 
 
@@ -1087,6 +1093,7 @@ def admin_post_status(item_id):
 @admin_required
 def admin_guest_status(item_id):
     return set_status("guest_feedback", item_id)
+
 init_db()
 
 
