@@ -229,8 +229,8 @@ def close_db(_error):
         db.close()
 
 
+
 def init_db():
-    # Local disk uploads are temporary on serverless hosts.
     if not DATABASE_URL:
         raise RuntimeError(
             "DATABASE_URL is missing. Set it in .env before starting CampusVoice."
@@ -242,7 +242,7 @@ def init_db():
         DATABASE_URL,
         row_factory=dict_row,
     ) as db:
-        # Prevent concurrent instances from initializing the schema together.
+        # Serialize schema initialization across application instances.
         db.execute("SELECT pg_advisory_xact_lock(20261024, 1)")
 
         for statement in SCHEMA.split(";"):
@@ -250,7 +250,6 @@ def init_db():
                 db.execute(statement)
 
         db.commit()
-
 
 
 # =========================================================
