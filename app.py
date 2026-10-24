@@ -24,6 +24,8 @@ import secrets
 from collections import defaultdict
 from datetime import timedelta
 from functools import wraps
+from supabase import create_client
+from urllib.parse import urljoin
 
 from flask import (
     Flask,
@@ -33,6 +35,7 @@ from flask import (
     send_from_directory,
     render_template,
     session,
+    redirect,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 from dotenv import load_dotenv
@@ -40,10 +43,23 @@ import psycopg
 from psycopg.rows import dict_row
 
 
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
+    "SUPABASE_SERVICE_ROLE_KEY", ""
+).strip()
+
+SUPABASE_BUCKET = "campusvoice-media"
+
+supabase_client = (
+    create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+    else None
+)
 
 SECRET_PATH = os.path.join(BASE_DIR, ".secret_key")
 
@@ -556,19 +572,14 @@ def sniff_media(head):
     return None
 
 
-def stored_media_path(url, kind):
-    """Path on disk for an uploaded file's '/media/<name>' URL.
-
-    Returns None unless the URL is one of ours, is the right kind of file
-    ('image' or 'video') and still exists.
-    """
+def stored_media_info(url, kind):
+    """Validate a media URL and return its name, size and local path."""
 
     if not isinstance(url, str) or not url.startswith("/media/"):
         return None
 
     name = url[len("/media/"):]
-
-    match = MEDIA_NAME.match(name)
+    match = MEDIA_NAME.fullmatch(name)
 
     if not match or match.group(1) not in MEDIA_TYPES:
         return None
@@ -576,23 +587,54 @@ def stored_media_path(url, kind):
     if MEDIA_TYPES[match.group(1)][0] != kind:
         return None
 
-    path = os.path.join(UPLOAD_DIR, name)
+    # Support existing files from local development.
+    local_path = os.path.join(UPLOAD_DIR, name)
 
-    return path if os.path.isfile(path) else None
+    if os.path.isfile(local_path):
+        return {
+            "name": name,
+            "size": os.path.getsize(local_path),
+            "local_path": local_path,
+        }
+
+    # Otherwise, verify that the object exists in Supabase Storage.
+    if supabase_client is None:
+        return None
+
+    try:
+        info = supabase_client.storage.from_(
+            SUPABASE_BUCKET
+        ).info(name)
+
+        metadata = info.get("metadata") or {}
+        raw_size = info.get("size") or metadata.get("size")
+
+        if raw_size is None:
+            raw_size = metadata.get("contentLength")
+
+        if raw_size is None:
+            return None
+
+        return {
+            "name": name,
+            "size": int(raw_size),
+            "local_path": None,
+        }
+
+    except Exception:
+        return None
 
 
 @app.post("/api/media")
 @login_required
 def upload_media():
-    """Save one photo or video and return its URL.
-
-    The page sends it as multipart form data with a 'file' field. The
-    custom header stands in for the JSON-only rule: a web page on another
-    site can't add it without the browser asking this server first.
-    """
+    """Validate and upload a photo or video to Supabase Storage."""
 
     if request.headers.get("X-CampusVoice-Upload") != "1":
         return error("Invalid request.")
+
+    if supabase_client is None:
+        return error("Media storage is not configured.", 503)
 
     upload = request.files.get("file")
 
@@ -600,11 +642,8 @@ def upload_media():
         return error("Please choose a file to upload.")
 
     head = upload.stream.read(64)
-
     upload.stream.seek(0, os.SEEK_END)
-
     size = upload.stream.tell()
-
     upload.stream.seek(0)
 
     extension = sniff_media(head)
@@ -616,7 +655,6 @@ def upload_media():
         )
 
     kind, mime = MEDIA_TYPES[extension]
-
     limit = MAX_IMAGE_BYTES if kind == "image" else MAX_VIDEO_BYTES
 
     if size == 0:
@@ -629,8 +667,21 @@ def upload_media():
         )
 
     name = secrets.token_hex(16) + extension
+    contents = upload.stream.read()
 
-    upload.save(os.path.join(UPLOAD_DIR, name))
+    try:
+        supabase_client.storage.from_(SUPABASE_BUCKET).upload(
+            path=name,
+            file=contents,
+            file_options={
+                "content-type": mime,
+                "cache-control": "3600",
+                "upsert": "false",
+            },
+        )
+    except Exception:
+        app.logger.exception("Supabase media upload failed")
+        return error("The media upload failed. Please try again.", 502)
 
     return jsonify(
         url="/media/" + name,
@@ -643,25 +694,67 @@ def upload_media():
 @app.get("/media/<name>")
 @login_required
 def serve_media(name):
-    """Send an uploaded file. Range requests work, so videos can seek."""
+    """Serve existing local media or redirect to a temporary signed URL."""
 
-    match = MEDIA_NAME.match(name)
+    match = MEDIA_NAME.fullmatch(name)
 
     if not match or match.group(1) not in MEDIA_TYPES:
         return error("Not found.", 404)
 
-    response = send_from_directory(
-        UPLOAD_DIR,
-        name,
-        mimetype=MEDIA_TYPES[match.group(1)][1],
-        conditional=True,
-        max_age=86400,
-    )
+    mime = MEDIA_TYPES[match.group(1)][1]
+    local_path = os.path.join(UPLOAD_DIR, name)
 
-    # Only logged-in users may see these, so keep them out of shared caches
+    # Keep existing local development files accessible.
+    if os.path.isfile(local_path):
+        response = send_from_directory(
+            UPLOAD_DIR,
+            name,
+            mimetype=mime,
+            conditional=True,
+            max_age=0,
+        )
+    else:
+        if supabase_client is None:
+            return error("Media storage is not configured.", 503)
+
+        try:
+            result = supabase_client.storage.from_(
+                SUPABASE_BUCKET
+            ).create_signed_url(name, 3600)
+
+            signed_url = (
+                result.get("signedURL")
+                or result.get("signedUrl")
+                or result.get("signed_url")
+            )
+
+            if not signed_url:
+                return error("Not found.", 404)
+
+            if signed_url.startswith("https://") or signed_url.startswith("http://"):
+                target_url = signed_url
+            elif signed_url.startswith("/storage/v1/"):
+                target_url = SUPABASE_URL + signed_url
+            else:
+                target_url = (
+                    SUPABASE_URL
+                    + "/storage/v1"
+                    + (
+                        signed_url
+                        if signed_url.startswith("/")
+                        else "/" + signed_url
+                    )
+                )
+
+            response = redirect(target_url, code=302)
+
+        except Exception:
+            app.logger.exception("Supabase media retrieval failed")
+            return error("Unable to retrieve this media right now.", 502)
+
     response.cache_control.public = False
     response.cache_control.private = True
-
+    response.cache_control.no_store = True
     response.headers["X-Content-Type-Options"] = "nosniff"
 
     return response
@@ -712,30 +805,31 @@ def create_review():
 
         if image.startswith("/media/"):
             # A photo uploaded through /api/media
-            if stored_media_path(image, "image") is None:
+            if stored_media_info(image, "image") is None:
                 return error("Please choose a valid photo.")
 
         elif len(image) > 3_000_000 or not IMAGE_PATTERN.match(image):
             # An inline photo, as older versions of the page sent
             return error("Please choose a valid image smaller than 2MB.")
 
-    video_path = None
+        video_info = None
 
     if video:
-        video_path = stored_media_path(video, "video")
+        video_info = stored_media_info(video, "video")
 
-        if video_path is None:
+        if video_info is None:
             return error("Please choose a valid video.")
 
     if live:
-        if not image or not video_path:
+        if not image or not video_info:
             return error("A Live Photo needs both a photo and its short video.")
 
-        if os.path.getsize(video_path) > MAX_LIVE_VIDEO_BYTES:
+        if video_info["size"] > MAX_LIVE_VIDEO_BYTES:
             return error(
                 "The Live Photo video is too large "
                 f"(the limit is {MAX_LIVE_VIDEO_BYTES // MB} MB)."
             )
+
 
     db = get_db()
 
