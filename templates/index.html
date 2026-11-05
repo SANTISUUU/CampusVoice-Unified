@@ -9,6 +9,14 @@
 
 <title>CampusVoice | Student Feedback Platform</title>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,500..700,0..1,0&display=block">
+
 <link rel="stylesheet" href="/static/style.css">
 
 </head>
@@ -43,7 +51,7 @@
 
             Your Voice. Your Campus.<br>
 
-            Your Feedback Matters.
+            <span>Your Feedback Matters.</span>
 
         </h1>
 
@@ -160,6 +168,17 @@
             </button>
 
 
+            <button
+                type="button"
+                class="forgot-link"
+                hidden
+                onclick="showForgot()">
+
+                Forgot password?
+
+            </button>
+
+
             <p class="auth-switch">
 
                 Don't have an account?
@@ -246,6 +265,71 @@
 
                 </span>
 
+            </p>
+
+        </div>
+
+
+        <!-- FORGOT PASSWORD -->
+
+        <div id="forgotForm" class="hidden">
+
+            <!-- Step 1: ask an admin for a code -->
+
+            <div id="forgotRequest">
+
+                <h2>Forgot your password?</h2>
+
+                <p class="auth-description">
+                    Enter your username and student number. An admin
+                    will give you a one-time reset code in person.
+                </p>
+
+                <input class="auth-input" id="forgotUsername" type="text" placeholder="Username" autocomplete="username">
+
+                <input class="auth-input" id="forgotStudentNumber" type="text" inputmode="numeric" maxlength="11" placeholder="Student Number (e.g. 21-0123-456)">
+
+                <button class="auth-submit" onclick="requestPasswordReset()">Request reset</button>
+
+                <p class="auth-switch">
+                    Already have a code?
+                    <span onclick="showForgotStep('code')">Enter it</span>
+                </p>
+
+            </div>
+
+
+            <!-- Step 2: use the code -->
+
+            <div id="forgotCode" class="hidden">
+
+                <h2>Set a new password</h2>
+
+                <p class="auth-description" id="forgotCodeNote">
+                    Enter the reset code an admin gave you. Codes work
+                    for 24 hours.
+                </p>
+
+                <input class="auth-input" id="resetUsername" type="text" placeholder="Username" autocomplete="username">
+
+                <input class="auth-input reset-code-input" id="resetCode" type="text" maxlength="9" placeholder="Reset code (e.g. ABCD-2345)" autocomplete="one-time-code" autocapitalize="characters">
+
+                <input class="auth-input" id="resetPassword" type="password" placeholder="New password (at least 6 characters)" autocomplete="new-password">
+
+                <input class="auth-input" id="resetConfirm" type="password" placeholder="Confirm new password" autocomplete="new-password">
+
+                <button class="auth-submit" onclick="completePasswordReset()">Save new password</button>
+
+                <p class="auth-switch">
+                    Need a code first?
+                    <span onclick="showForgotStep('request')">Request one</span>
+                </p>
+
+            </div>
+
+            <p class="auth-switch">
+                Remembered it?
+                <span onclick="showLogin()">Log In</span>
             </p>
 
         </div>
@@ -617,567 +701,506 @@
 
 <!-- =========================================================
      MAIN PAGE
+     Sidebar from 1024px up, bottom tab bar below that.
 ========================================================= -->
 
 <section id="mainPage">
 
+<div class="app-shell">
 
-<!-- HEADER -->
+    <aside class="sidebar" aria-label="Main navigation">
 
-<header class="header">
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span class="brand-word">Campus<span>Voice</span></span>
+        </div>
 
-    <div class="logo">
-
-        Campus<span>Voice</span>
-
-    </div>
-
-
-    <div class="header-right">
-
-        <span
-            class="user-pill"
-            id="currentUser">
-
-        </span>
-
-        <button
-            class="logout-btn hidden"
-            id="adminBtn"
-            onclick="showAdmin()">
-
-            📊 Admin
-
+        <button type="button" class="btn btn-accent btn-lg sidebar-cta" onclick="openCompose()">
+            <span class="msr" aria-hidden="true">edit</span>Share feedback
         </button>
 
-        <button
-            class="logout-btn"
-            onclick="logout()">
+        <nav class="side-nav">
 
-            Log Out
-
-        </button>
-
-    </div>
-
-</header>
-
-
-
-<!-- CONTENT -->
-
-<main class="container">
-
-
-    <!-- HERO -->
-
-    <section class="dashboard-hero">
-
-        <h1>
-
-            Computer Studies Department
-
-        </h1>
-
-
-        <p>
-
-            Welcome to CampusVoice. Share your
-            experiences, provide feedback, join
-            discussions, and help identify areas
-            that may need improvement.
-
-        </p>
-
-
-        <div class="stats-grid">
-
-
-            <div class="stat-card">
-
-                <div class="stat-label">
-
-                    Overall Rating
-
-                </div>
-
-
-                <div
-                    class="stat-value"
-                    id="overallRating">
-
-                    0.0 / 5
-
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-label">
-
-                    Student Reviews
-
-                </div>
-
-
-                <div
-                    class="stat-value"
-                    id="totalReviews">
-
-                    0
-
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <div class="stat-label">
-
-                    Discussion Replies
-
-                </div>
-
-
-                <div
-                    class="stat-value"
-                    id="totalReplies">
-
-                    0
-
-                </div>
-
-            </div>
-
-
-        </div>
-
-    </section>
-
-
-
-    <!-- EVALUATION DIMENSIONS -->
-
-    <h2 class="section-title">
-
-        Feedback Areas
-
-    </h2>
-
-
-    <section class="category-grid">
-
-
-        <div class="category-card">
-
-            <div class="category-icon">
-
-                ℹ️
-
-            </div>
-
-
-            <h3>
-
-                Information Accessibility
-
-            </h3>
-
-
-            <p>
-
-                Share feedback about how easily
-                students can access information,
-                announcements, instructions, and
-                other relevant resources.
-
-            </p>
-
-        </div>
-
-
-
-        <div class="category-card">
-
-            <div class="category-icon">
-
-                🖥️
-
-            </div>
-
-
-            <h3>
-
-                Quality & Condition
-
-            </h3>
-
-
-            <p>
-
-                Evaluate the quality and condition
-                of facilities, equipment, and
-                services experienced by students.
-
-            </p>
-
-        </div>
-
-
-
-        <div class="category-card">
-
-            <div class="category-icon">
-
-                💬
-
-            </div>
-
-
-            <h3>
-
-                Responsiveness
-
-            </h3>
-
-
-            <p>
-
-                Share experiences about how concerns,
-                questions, and requests are addressed.
-
-            </p>
-
-        </div>
-
-
-    </section>
-
-
-
-    <!-- WRITE REVIEW -->
-
-    <section class="review-form">
-
-        <h2>
-
-            Share Your Feedback
-
-        </h2>
-
-
-        <p class="form-subtitle">
-
-            Rate your experience from 1 to 5 stars
-            and provide details that may help the
-            department understand student concerns.
-
-        </p>
-
-
-        <!-- Category -->
-
-        <div class="review-category">
-
-            <label for="reviewCategory">
-
-                Feedback Area
-
-            </label>
-
-
-            <select id="reviewCategory">
-
-                <option value="Information Accessibility">
-
-                    Information Accessibility
-
-                </option>
-
-
-                <option value="Quality & Condition">
-
-                    Quality & Condition
-
-                </option>
-
-
-                <option value="Responsiveness">
-
-                    Responsiveness
-
-                </option>
-
-            </select>
-
-        </div>
-
-
-        <!-- Stars -->
-
-        <div class="star-rating">
-
-            <span
-                class="star"
-                onclick="selectStar(1)">
-
-                ★
-
-            </span>
-
-
-            <span
-                class="star"
-                onclick="selectStar(2)">
-
-                ★
-
-            </span>
-
-
-            <span
-                class="star"
-                onclick="selectStar(3)">
-
-                ★
-
-            </span>
-
-
-            <span
-                class="star"
-                onclick="selectStar(4)">
-
-                ★
-
-            </span>
-
-
-            <span
-                class="star"
-                onclick="selectStar(5)">
-
-                ★
-
-            </span>
-
-        </div>
-
-
-        <!-- Text -->
-
-        <textarea
-            id="reviewInput"
-            placeholder="Write your feedback here...">
-        </textarea>
-
-
-        <!-- Photo, video or Live Photo (see Static/media.js) -->
-
-        <div class="upload-box">
-
-            <strong>
-
-                📷 Add a photo or video
-
-            </strong>
-
-
-            <p
-                class="upload-hint"
-                id="mediaHint">
-            </p>
-
-
-            <div>
-
-                <input
-                    type="file"
-                    id="photoInput"
-                    multiple
-                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.heic,.heif,.mov"
-                    onchange="handleMediaSelect(event)">
-
-            </div>
-
-
-            <div
-                id="mediaPreview"
-                class="media-preview hidden">
-            </div>
-
-
-            <p
-                id="mediaStatus"
-                class="media-status"
-                role="status"
-                aria-live="polite">
-            </p>
-
-
-            <progress
-                id="mediaProgress"
-                class="media-progress hidden"
-                max="1"
-                value="0">
-            </progress>
-
-
-            <button
-                type="button"
-                id="mediaRemove"
-                class="media-remove hidden"
-                onclick="resetMediaPicker()">
-
-                ✕ Remove
-
+            <button type="button" class="side-link is-active" data-nav="all" onclick="setArea('all')">
+                <span class="msr" aria-hidden="true">home</span>Feed
             </button>
 
+            <span class="side-label">Feedback areas</span>
+
+            <button type="button" class="side-link" data-nav="Information Accessibility" onclick="setArea('Information Accessibility')">
+                <span class="area-ico" data-area="info"><span class="msr" aria-hidden="true">campaign</span></span>Info Access
+                <span class="side-count" data-count="Information Accessibility">0</span>
+            </button>
+
+            <button type="button" class="side-link" data-nav="Quality &amp; Condition" onclick="setArea('Quality &amp; Condition')">
+                <span class="area-ico" data-area="quality"><span class="msr" aria-hidden="true">handyman</span></span>Quality &amp; Condition
+                <span class="side-count" data-count="Quality &amp; Condition">0</span>
+            </button>
+
+            <button type="button" class="side-link" data-nav="Responsiveness" onclick="setArea('Responsiveness')">
+                <span class="area-ico" data-area="resp"><span class="msr" aria-hidden="true">forum</span></span>Responsiveness
+                <span class="side-count" data-count="Responsiveness">0</span>
+            </button>
+
+            <span class="side-divider"></span>
+
+            <button type="button" class="side-link" data-nav="fixed" onclick="setArea('fixed')">
+                <span class="msr" aria-hidden="true">task_alt</span>Recently fixed
+                <span class="side-count" data-count="fixed">0</span>
+            </button>
+
+            <button type="button" class="side-link admin-only hidden" id="adminBtn" onclick="showAdmin()">
+                <span class="msr" aria-hidden="true">shield_person</span>Admin
+                <span class="side-badge hidden" data-pending-badge></span>
+            </button>
+
+        </nav>
+
+        <div class="side-user">
+            <span class="avatar" data-user-avatar aria-hidden="true"></span>
+            <div class="side-user-text">
+                <b id="currentUser"></b>
+                <span class="mono" data-user-number></span>
+            </div>
+            <button type="button" class="icon-btn" aria-label="Log out" title="Log out" onclick="logout()">
+                <span class="msr" aria-hidden="true">logout</span>
+            </button>
         </div>
 
-
-        <button
-            class="post-review-btn"
-            onclick="postReview()">
-
-            Submit Feedback
-
-        </button>
-
-    </section>
+    </aside>
 
 
+    <div class="app-main">
 
-    <!-- REVIEWS -->
+        <!-- Mobile / tablet top bar -->
 
-    <div class="review-toolbar">
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true"></span>
+                <span class="brand-word">Campus<span>Voice</span></span>
+            </div>
+            <button type="button" class="icon-btn" aria-label="Search" onclick="focusSearch()">
+                <span class="msr" aria-hidden="true">search</span>
+            </button>
+            <button type="button" class="avatar avatar-btn" data-user-avatar aria-label="Account" onclick="openSheet('meSheet')"></button>
+        </header>
 
-        <h2>
 
-            Student Feedback
+        <main class="feed-col">
 
-        </h2>
+            <section class="hero" aria-labelledby="heroTitle">
+                <span class="hero-sun" aria-hidden="true"></span>
+                <span class="hero-tile" aria-hidden="true"></span>
+                <div class="hero-text">
+                    <span id="greeting">Welcome back</span>
+                    <h1 id="heroTitle">Computer Studies Department</h1>
+                    <span class="hero-sub">How are services and facilities treating you this week?</span>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat stat-yellow">
+                        <span class="stat-label">Overall rating</span>
+                        <b class="stat-value" id="overallRating">0.0<small> / 5</small></b>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Student reviews</span>
+                        <b class="stat-value" id="totalReviews">0</b>
+                    </div>
+                    <div class="stat stat-mint">
+                        <span class="stat-label">Discussion replies</span>
+                        <b class="stat-value" id="totalReplies">0</b>
+                    </div>
+                </div>
+            </section>
 
 
-        <input
-            class="search-box"
-            id="searchInput"
-            type="search"
-            placeholder="Search feedback..."
-            oninput="renderReviews()">
+            <button type="button" class="composer-trigger" onclick="openCompose()">
+                <span class="avatar" data-user-avatar aria-hidden="true"></span>
+                <span class="composer-placeholder">Share an experience, rate an area…</span>
+                <span class="msr composer-ico" aria-hidden="true">add_photo_alternate</span>
+                <span class="composer-post">Post</span>
+            </button>
+
+
+            <div class="review-toolbar">
+
+                <div class="chip-row" role="tablist" aria-label="Feedback area">
+                    <button type="button" role="tab" class="chip is-active" aria-selected="true" data-area-chip="all" onclick="setArea('all')">All areas</button>
+                    <button type="button" role="tab" class="chip" aria-selected="false" data-area-chip="Information Accessibility" onclick="setArea('Information Accessibility')"><span class="msr" aria-hidden="true">campaign</span>Info</button>
+                    <button type="button" role="tab" class="chip" aria-selected="false" data-area-chip="Quality &amp; Condition" onclick="setArea('Quality &amp; Condition')"><span class="msr" aria-hidden="true">handyman</span>Quality</button>
+                    <button type="button" role="tab" class="chip" aria-selected="false" data-area-chip="Responsiveness" onclick="setArea('Responsiveness')"><span class="msr" aria-hidden="true">forum</span>Responsiveness</button>
+                </div>
+
+                <div class="toolbar-right">
+                    <label class="search-field">
+                        <span class="msr" aria-hidden="true">search</span>
+                        <input id="searchInput" type="search" placeholder="Search feedback" aria-label="Search feedback" oninput="renderReviews()">
+                        <button type="button" class="search-clear" aria-label="Clear search" onclick="clearSearch()"><span class="msr" aria-hidden="true">close</span></button>
+                    </label>
+                    <label class="sort-field">
+                        <span class="msr" aria-hidden="true">sort</span>
+                        <select id="sortSelect" aria-label="Sort posts" onchange="renderReviews()">
+                            <option value="newest">Newest</option>
+                            <option value="top">Top rated</option>
+                            <option value="liked">Most liked</option>
+                        </select>
+                        <span class="msr" aria-hidden="true">expand_more</span>
+                    </label>
+                </div>
+
+            </div>
+
+            <p class="feed-meta" id="feedCount"></p>
+
+            <div id="reviewsContainer" class="feed"></div>
+
+            <footer class="app-footer">
+                CampusVoice © 2026 · Computer Studies Department · Student Feedback Platform
+            </footer>
+
+        </main>
 
     </div>
 
 
-    <div id="reviewsContainer">
+    <aside class="rail" aria-label="Highlights">
 
-    </div>
+        <div class="rail-card">
+            <b class="rail-title">Ratings by area</b>
+            <div class="area-ratings" data-area-ratings></div>
+        </div>
+
+        <div class="rail-card rail-fixed">
+            <b class="rail-title">Recently fixed</b>
+            <div id="recentFixed"></div>
+        </div>
+
+    </aside>
+
+</div>
 
 
-</main>
-
-
-
-<footer>
-
-    CampusVoice © 2026
-
-    <br>
-
-    Computer Studies Department · Student Feedback Platform
-
-</footer>
-
+<nav class="tabbar" aria-label="Main">
+    <button type="button" class="tab is-active" data-tab="feed" onclick="setArea('all')"><span class="tab-ico"><span class="msr" aria-hidden="true">home</span></span>Feed</button>
+    <button type="button" class="tab" onclick="openSheet('areasSheet')"><span class="tab-ico"><span class="msr" aria-hidden="true">category</span></span>Areas</button>
+    <button type="button" class="tab tab-post" onclick="openCompose()"><span class="tab-fab"><span class="msr" aria-hidden="true">edit</span></span>Post</button>
+    <button type="button" class="tab student-only" data-tab="fixed" onclick="setArea('fixed')"><span class="tab-ico"><span class="msr" aria-hidden="true">task_alt</span></span>Fixed</button>
+    <button type="button" class="tab admin-only hidden" onclick="showAdmin()"><span class="tab-ico"><span class="msr" aria-hidden="true">shield_person</span></span>Admin</button>
+    <button type="button" class="tab" onclick="openSheet('meSheet')"><span class="tab-ico"><span class="msr" aria-hidden="true">person</span></span>Me</button>
+</nav>
 
 </section>
+
+
 
 <!-- =========================================================
      ADMIN PAGE (only admins can open it)
 ========================================================= -->
 
-<section id="adminPage">
+<section id="adminPage" data-tab="posts">
 
-    <header class="header">
+<div class="admin-wrap">
 
-        <div class="logo">
-
-            Campus<span>Voice</span> Admin
-
-        </div>
-
-        <div class="header-right">
-
-            <button
-                class="logout-btn"
-                onclick="hideAdmin()">
-
-                ← Back to Feedback
-
+    <div class="admin-top">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="hideAdmin()">
+            <span class="msr" aria-hidden="true">arrow_back</span>Back to feedback
+        </button>
+        <span class="admin-pill"><span class="msr" aria-hidden="true">shield_person</span>ADMIN</span>
+        <div class="admin-user">
+            <span class="avatar" data-user-avatar aria-hidden="true"></span>
+            <b data-user-name></b>
+            <button type="button" class="icon-btn" aria-label="Log out" title="Log out" onclick="logout()">
+                <span class="msr" aria-hidden="true">logout</span>
             </button>
-
         </div>
+    </div>
 
-    </header>
+    <div class="admin-head">
+        <h1>Feedback triage</h1>
+        <p>Work through Pending items; students see status changes on their posts.</p>
+    </div>
 
-
-    <main class="container">
-
-        <h2 class="section-title">Workload</h2>
-
-        <div class="admin-stats">
-
-            <div class="admin-stat">
-                <div class="admin-stat-label">Pending</div>
-                <div class="admin-stat-value pending-color" id="adminPending">0</div>
-            </div>
-
-            <div class="admin-stat">
-                <div class="admin-stat-label">Completed</div>
-                <div class="admin-stat-value done-color" id="adminCompleted">0</div>
-            </div>
-
-            <div class="admin-stat">
-                <div class="admin-stat-label">Total</div>
-                <div class="admin-stat-value" id="adminTotal">0</div>
-            </div>
-
+    <div class="tri-stats">
+        <button type="button" class="tri-stat tri-pending" data-filter="pending" aria-pressed="false" onclick="setAdminFilter('pending')">
+            <span class="tri-label"><span class="msr" aria-hidden="true">schedule</span>Pending</span>
+            <b id="adminPending">0</b>
+            <span class="tri-note" id="adminPendingNote"></span>
+        </button>
+        <button type="button" class="tri-stat tri-done" data-filter="completed" aria-pressed="false" onclick="setAdminFilter('completed')">
+            <span class="tri-label"><span class="msr fill" aria-hidden="true">check_circle</span>Completed</span>
+            <b id="adminCompleted">0</b>
+            <span class="tri-note" id="adminCompletedNote"></span>
+        </button>
+        <button type="button" class="tri-stat tri-total" data-filter="all" aria-pressed="true" onclick="setAdminFilter('all')">
+            <span class="tri-label"><span class="msr" aria-hidden="true">inbox</span>Total</span>
+            <b id="adminTotal">0</b>
+            <span class="tri-note" id="adminTotalNote"></span>
+        </button>
+        <div class="tri-resolved">
+            <span class="tri-resolved-row"><span>Resolved</span><b id="adminResolved">0%</b></span>
+            <div class="tri-bar"><span id="adminResolvedBar"></span></div>
+            <span class="tri-note">Share of all items marked Completed</span>
         </div>
+    </div>
 
-
-        <div class="review-toolbar">
-
-            <h2>Student Posts</h2>
-
-            <select
-                class="search-box"
-                id="adminFilter"
-                onchange="renderAdmin()">
-
-                <option value="all">Show all</option>
-                <option value="pending">Pending only</option>
-                <option value="completed">Completed only</option>
-
-            </select>
-
+    <div class="tri-controls">
+        <div class="segmented" role="tablist" aria-label="Filter by status">
+            <button type="button" role="tab" data-filter="all" class="is-active" onclick="setAdminFilter('all')">All · <span data-c="all">0</span></button>
+            <button type="button" role="tab" data-filter="pending" onclick="setAdminFilter('pending')">Pending only · <span data-c="pending">0</span></button>
+            <button type="button" role="tab" data-filter="completed" onclick="setAdminFilter('completed')">Completed only · <span data-c="completed">0</span></button>
         </div>
+        <label class="search-field">
+            <span class="msr" aria-hidden="true">search</span>
+            <input id="adminSearch" type="search" placeholder="Search items" aria-label="Search items" oninput="renderAdmin()">
+        </label>
+    </div>
 
+    <div class="tri-tabs" role="tablist" aria-label="Item type">
+        <button type="button" role="tab" data-tab="posts" class="is-active" aria-selected="true" onclick="setAdminTab('posts')">Student posts · <span data-tc="posts">0</span></button>
+        <button type="button" role="tab" data-tab="guests" aria-selected="false" onclick="setAdminTab('guests')">Guest · <span data-tc="guests">0</span></button>
+    </div>
+
+    <section class="tri-panel" data-panel="posts" aria-label="Student posts">
+        <div class="tri-panel-head">
+            <span class="msr" aria-hidden="true">school</span><b>Student posts</b><span class="mono" data-tc="posts">0</span>
+        </div>
+        <div class="tri-cols tri-cols-posts" aria-hidden="true">
+            <span>Status</span><span>Student</span><span>Area</span><span>Rating</span><span>Date</span><span>Feedback</span><span></span>
+        </div>
         <div id="adminPosts"></div>
+    </section>
 
-
-        <div class="review-toolbar">
-
-            <h2>Guest Feedback</h2>
-
+    <section class="tri-panel" data-panel="guests" aria-label="Guest feedback">
+        <div class="tri-panel-head">
+            <span class="msr" aria-hidden="true">mail</span><b>Guest feedback</b><span class="mono" data-tc="guests">0</span>
+            <span class="tri-private">Private — never shown in the feed</span>
         </div>
-
+        <div class="tri-cols tri-cols-guests" aria-hidden="true">
+            <span>Status</span><span>Role</span><span>Contact</span><span>Date</span><span>Message</span><span></span>
+        </div>
         <div id="adminGuests"></div>
+    </section>
 
-    </main>
+    <!-- Password reset: hidden until the feature is finished -->
+    <section class="sys-panel" aria-labelledby="resetTitle" hidden>
+        <div class="sys-head">
+            <span class="msr" aria-hidden="true">key</span>
+            <b id="resetTitle">Password reset requests</b>
+            <span class="mono reset-count" id="resetCount"></span>
+        </div>
+        <p class="sys-intro">Check it's really the student (in person or their school account), then create a one-time code and give it to them. Codes last 24 hours.</p>
+        <ul class="sys-list" id="resetList"></ul>
+    </section>
+
+    <section class="sys-panel" aria-labelledby="sysTitle">
+        <div class="sys-head">
+            <span class="msr" aria-hidden="true">monitor_heart</span>
+            <b id="sysTitle">System status</b>
+            <span class="status-pill sys-overall" id="sysOverall"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="sysRun" onclick="loadSystemStatus()">
+                <span class="msr" aria-hidden="true">refresh</span>Run check
+            </button>
+        </div>
+        <p class="sys-intro">Checks the database, Supabase Storage and hosting setup. Keys are never shown — only whether they're set and look right.</p>
+        <ul class="sys-list" id="sysList"></ul>
+    </section>
+
+    <footer class="app-footer">
+        CampusVoice © 2026 · Computer Studies Department · Student Feedback Platform
+    </footer>
+
+</div>
+
+<nav class="tabbar" aria-label="Main">
+    <button type="button" class="tab" onclick="setArea('all')"><span class="tab-ico"><span class="msr" aria-hidden="true">home</span></span>Feed</button>
+    <button type="button" class="tab" onclick="hideAdmin(); openSheet('areasSheet')"><span class="tab-ico"><span class="msr" aria-hidden="true">category</span></span>Areas</button>
+    <button type="button" class="tab tab-post" onclick="hideAdmin(); openCompose()"><span class="tab-fab"><span class="msr" aria-hidden="true">edit</span></span>Post</button>
+    <button type="button" class="tab is-active" aria-current="page"><span class="tab-ico"><span class="msr" aria-hidden="true">shield_person</span></span>Admin</button>
+    <button type="button" class="tab" onclick="openSheet('meSheet')"><span class="tab-ico"><span class="msr" aria-hidden="true">person</span></span>Me</button>
+</nav>
 
 </section>
+
+
+
+<!-- =========================================================
+     COMPOSE DIALOG (desktop modal, mobile full-height sheet)
+========================================================= -->
+
+<div class="modal modal-compose hidden" id="composeModal" role="dialog" aria-modal="true" aria-labelledby="composeTitle">
+
+    <div class="dialog">
+
+        <div class="dialog-head">
+            <h2 id="composeTitle">New feedback</h2>
+            <button type="button" class="icon-btn icon-btn-soft" aria-label="Close" onclick="closeCompose()">
+                <span class="msr" aria-hidden="true">close</span>
+            </button>
+        </div>
+
+        <div class="dialog-body">
+
+            <div class="field">
+                <span class="field-label" id="areaLabel">Feedback area <span class="req">*</span></span>
+
+                <div class="area-tiles" role="radiogroup" aria-labelledby="areaLabel">
+                    <button type="button" role="radio" aria-checked="true" class="area-tile" data-area="info" data-value="Information Accessibility" onclick="chooseArea(this.dataset.value)">
+                        <span class="area-ico" data-area="info"><span class="msr" aria-hidden="true">campaign</span></span>Information Accessibility
+                        <span class="tile-check"><span class="msr" aria-hidden="true">check</span></span>
+                    </button>
+                    <button type="button" role="radio" aria-checked="false" class="area-tile" data-area="quality" data-value="Quality &amp; Condition" onclick="chooseArea(this.dataset.value)">
+                        <span class="area-ico" data-area="quality"><span class="msr" aria-hidden="true">handyman</span></span>Quality &amp; Condition
+                        <span class="tile-check"><span class="msr" aria-hidden="true">check</span></span>
+                    </button>
+                    <button type="button" role="radio" aria-checked="false" class="area-tile" data-area="resp" data-value="Responsiveness" onclick="chooseArea(this.dataset.value)">
+                        <span class="area-ico" data-area="resp"><span class="msr" aria-hidden="true">forum</span></span>Responsiveness
+                        <span class="tile-check"><span class="msr" aria-hidden="true">check</span></span>
+                    </button>
+                </div>
+
+                <label class="select-field area-select">
+                    <select id="reviewCategory" aria-labelledby="areaLabel" onchange="chooseArea(this.value)">
+                        <option value="Information Accessibility">Information Accessibility</option>
+                        <option value="Quality &amp; Condition">Quality &amp; Condition</option>
+                        <option value="Responsiveness">Responsiveness</option>
+                    </select>
+                    <span class="msr" aria-hidden="true">expand_more</span>
+                </label>
+            </div>
+
+            <div class="field field-inline">
+                <span class="field-label" id="ratingLabel">Your rating <span class="req">*</span></span>
+                <div class="star-rating" role="radiogroup" aria-labelledby="ratingLabel">
+                    <button type="button" class="star" role="radio" aria-checked="false" aria-label="1 star, Poor" onclick="selectStar(1)"><span class="msr" aria-hidden="true">star</span></button>
+                    <button type="button" class="star" role="radio" aria-checked="false" aria-label="2 stars, Fair" onclick="selectStar(2)"><span class="msr" aria-hidden="true">star</span></button>
+                    <button type="button" class="star" role="radio" aria-checked="false" aria-label="3 stars, Okay" onclick="selectStar(3)"><span class="msr" aria-hidden="true">star</span></button>
+                    <button type="button" class="star" role="radio" aria-checked="false" aria-label="4 stars, Good" onclick="selectStar(4)"><span class="msr" aria-hidden="true">star</span></button>
+                    <button type="button" class="star" role="radio" aria-checked="false" aria-label="5 stars, Great" onclick="selectStar(5)"><span class="msr" aria-hidden="true">star</span></button>
+                </div>
+                <span class="rating-word hidden" id="ratingWord"></span>
+            </div>
+
+            <div class="text-box">
+                <textarea id="reviewInput" maxlength="2000" aria-label="Your feedback" placeholder="What happened? Where and when? Details help the department act on it." oninput="updateReviewCounter()"></textarea>
+                <div class="counter"><b id="reviewCount">0</b>&nbsp;/ 2000</div>
+            </div>
+
+            <!-- Photo, video or Live Photo (see static/media.js) -->
+
+            <div class="upload-box">
+                <label class="upload-add" for="photoInput">
+                    <span class="msr" aria-hidden="true">add_photo_alternate</span>
+                    <b>Add media</b>
+                </label>
+                <input type="file" id="photoInput" class="visually-hidden" multiple accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.heic,.heif,.mov" onchange="handleMediaSelect(event)">
+                <div class="upload-side">
+                    <div id="mediaPreview" class="media-preview hidden"></div>
+                    <p id="mediaStatus" class="media-status" role="status" aria-live="polite"></p>
+                    <progress id="mediaProgress" class="media-progress hidden" max="1" value="0"></progress>
+                    <button type="button" id="mediaRemove" class="media-remove hidden" onclick="resetMediaPicker()">
+                        <span class="msr" aria-hidden="true">close</span>Remove
+                    </button>
+                </div>
+            </div>
+
+            <p class="upload-hint" id="mediaHint"></p>
+
+        </div>
+
+        <div class="dialog-foot">
+            <span class="foot-note">Posting publicly as <b data-user-name></b></span>
+            <button type="button" class="btn btn-ghost" onclick="closeCompose()">Cancel</button>
+            <button type="button" class="btn btn-primary post-review-btn" onclick="postReview()">
+                <span class="msr" aria-hidden="true">send</span>Post feedback
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+
+
+<!-- REPORT DIALOG -->
+
+<div class="modal hidden" id="reportModal" role="dialog" aria-modal="true" aria-labelledby="reportTitle">
+    <div class="dialog dialog-sm">
+        <div class="dialog-head">
+            <h2 id="reportTitle">Report this post</h2>
+            <button type="button" class="icon-btn icon-btn-soft" aria-label="Close" onclick="closeModal('reportModal')">
+                <span class="msr" aria-hidden="true">close</span>
+            </button>
+        </div>
+        <div class="dialog-body">
+            <p class="dialog-copy">Tell the admins what’s wrong with this post. Reports are private.</p>
+            <div class="text-box">
+                <textarea id="reportReason" maxlength="500" aria-label="Reason for reporting" placeholder="e.g. It shares someone’s personal details" data-autofocus></textarea>
+            </div>
+            <span class="field-error" id="reportError" role="alert"></span>
+        </div>
+        <div class="dialog-foot">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('reportModal')">Cancel</button>
+            <button type="button" class="btn btn-danger" id="reportSubmit" onclick="submitReport()">
+                <span class="msr" aria-hidden="true">flag</span>Send report
+            </button>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- MOBILE SHEETS -->
+
+<div class="modal modal-sheet hidden" id="meSheet" role="dialog" aria-modal="true" aria-label="Account">
+    <div class="sheet">
+        <span class="sheet-grip" aria-hidden="true"></span>
+        <div class="sheet-user">
+            <span class="avatar avatar-lg" data-user-avatar aria-hidden="true"></span>
+            <div class="side-user-text">
+                <b data-user-name></b>
+                <span class="mono" data-user-number></span>
+            </div>
+        </div>
+        <button type="button" class="sheet-item admin-only hidden" onclick="closeSheet('meSheet'); showAdmin()">
+            <span class="msr" aria-hidden="true">shield_person</span>Admin dashboard
+            <span class="side-badge hidden" data-pending-badge></span>
+        </button>
+        <button type="button" class="sheet-item" onclick="closeSheet('meSheet'); setArea('fixed')">
+            <span class="msr" aria-hidden="true">task_alt</span>Recently fixed
+        </button>
+        <button type="button" class="sheet-item sheet-item-danger" onclick="logout()">
+            <span class="msr" aria-hidden="true">logout</span>Log out
+        </button>
+    </div>
+</div>
+
+<div class="modal modal-sheet hidden" id="areasSheet" role="dialog" aria-modal="true" aria-labelledby="areasTitle">
+    <div class="sheet">
+        <span class="sheet-grip" aria-hidden="true"></span>
+        <h2 class="sheet-title" id="areasTitle">Feedback areas</h2>
+        <button type="button" class="sheet-item" onclick="setArea('all')">
+            <span class="msr" aria-hidden="true">home</span>All areas
+        </button>
+        <button type="button" class="sheet-item" onclick="setArea('Information Accessibility')">
+            <span class="area-ico" data-area="info"><span class="msr" aria-hidden="true">campaign</span></span>Information Accessibility
+            <span class="side-count" data-count="Information Accessibility">0</span>
+        </button>
+        <button type="button" class="sheet-item" onclick="setArea('Quality &amp; Condition')">
+            <span class="area-ico" data-area="quality"><span class="msr" aria-hidden="true">handyman</span></span>Quality &amp; Condition
+            <span class="side-count" data-count="Quality &amp; Condition">0</span>
+        </button>
+        <button type="button" class="sheet-item" onclick="setArea('Responsiveness')">
+            <span class="area-ico" data-area="resp"><span class="msr" aria-hidden="true">forum</span></span>Responsiveness
+            <span class="side-count" data-count="Responsiveness">0</span>
+        </button>
+        <div class="area-ratings sheet-ratings" data-area-ratings></div>
+    </div>
+</div>
+
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+
+<script src="/static/ui.js"></script>
 
 <script src="/static/media.js"></script>
 

@@ -18,9 +18,13 @@ Then open http://127.0.0.1:5000
   folder (created automatically). Posts only store the file's URL.
 """
 
+import base64
+import json
 import os
 import re
 import secrets
+import urllib.error
+import urllib.request
 from collections import defaultdict
 from datetime import timedelta
 from functools import wraps
@@ -194,6 +198,10 @@ ALTER TABLE reviews ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pendi
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS video TEXT NOT NULL DEFAULT '';
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS is_live BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE guest_feedback ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_requested_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_expires_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_attempts INTEGER NOT NULL DEFAULT 0;
 """
 
 
@@ -633,7 +641,11 @@ def upload_media():
     if request.headers.get("X-CampusVoice-Upload") != "1":
         return error("Invalid request.")
 
-    if supabase_client is None:
+    # Without Supabase, local development saves files to the uploads
+    # folder. On Vercel that folder is wiped, so it stays an error there.
+    use_local_storage = supabase_client is None and not os.environ.get("VERCEL")
+
+    if supabase_client is None and not use_local_storage:
         return error("Media storage is not configured.", 503)
 
     upload = request.files.get("file")
@@ -668,6 +680,20 @@ def upload_media():
 
     name = secrets.token_hex(16) + extension
     contents = upload.stream.read()
+
+    if use_local_storage:
+
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+        with open(os.path.join(UPLOAD_DIR, name), "wb") as file:
+            file.write(contents)
+
+        return jsonify(
+            url="/media/" + name,
+            kind=kind,
+            mime=mime,
+            size=size,
+        ), 201
 
     try:
         supabase_client.storage.from_(SUPABASE_BUCKET).upload(
@@ -1087,6 +1113,451 @@ def admin_post_status(item_id):
 @admin_required
 def admin_guest_status(item_id):
     return set_status("guest_feedback", item_id)
+
+
+# =========================================================
+# FORGOT PASSWORD
+# There is no email service, so an admin hands out a one-time
+# code: the student requests a reset, an admin creates a code
+# from the dashboard and gives it to them, and the student uses
+# it to choose a new password. Codes last 24 hours and stop
+# working after 5 wrong tries.
+# =========================================================
+
+RESET_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I
+RESET_CODE_HOURS = 24
+RESET_MAX_ATTEMPTS = 5
+
+
+def normalise_code(code):
+    return re.sub(r"[^A-Za-z0-9]", "", code or "").upper()
+
+
+@app.post("/api/password-reset/request")
+def password_reset_request():
+
+    data = json_body()
+
+    username = clean(data.get("username"), 30) if data else None
+    student_number = clean(data.get("student_number"), 11) if data else None
+
+    if not username or not student_number:
+        return error("Please enter your username and student number.")
+
+    db = get_db()
+
+    # Only flag the account when both match, but answer the same either
+    # way so this can't be used to find out which usernames exist.
+    db.execute(
+        "UPDATE users SET reset_requested_at = NOW() "
+        "WHERE LOWER(username) = LOWER(%s) AND student_number = %s",
+        (username, student_number),
+    )
+    db.commit()
+
+    return jsonify(ok=True)
+
+
+@app.post("/api/password-reset/complete")
+def password_reset_complete():
+
+    data = json_body()
+
+    if data is None:
+        return error("Invalid request.")
+
+    username = clean(data.get("username"), 30)
+    code = normalise_code(data.get("code") if isinstance(data.get("code"), str) else "")
+    password = data.get("password")
+
+    if not username or not code or not isinstance(password, str):
+        return error("Please fill in your username, reset code and new password.")
+
+    if not 6 <= len(password) <= 128:
+        return error("Password must contain at least 6 characters.")
+
+    db = get_db()
+
+    user = db.execute(
+        "SELECT id, reset_code_hash, reset_attempts, "
+        "reset_expires_at IS NOT NULL AND reset_expires_at > NOW() AS valid "
+        "FROM users WHERE LOWER(username) = LOWER(%s)",
+        (username,),
+    ).fetchone()
+
+    invalid = "That reset code is wrong or has expired. Ask an admin for a new one."
+
+    if user is None or not user["reset_code_hash"] or not user["valid"]:
+        return error(invalid, 400)
+
+    if not check_password_hash(user["reset_code_hash"], code):
+
+        attempts = user["reset_attempts"] + 1
+
+        if attempts >= RESET_MAX_ATTEMPTS:
+            db.execute(
+                "UPDATE users SET reset_code_hash = '', reset_expires_at = NULL, "
+                "reset_attempts = 0 WHERE id = %s",
+                (user["id"],),
+            )
+        else:
+            db.execute(
+                "UPDATE users SET reset_attempts = %s WHERE id = %s",
+                (attempts, user["id"]),
+            )
+
+        db.commit()
+
+        return error(invalid, 400)
+
+    db.execute(
+        "UPDATE users SET password_hash = %s, reset_code_hash = '', "
+        "reset_expires_at = NULL, reset_attempts = 0, reset_requested_at = NULL "
+        "WHERE id = %s",
+        (generate_password_hash(password), user["id"]),
+    )
+    db.commit()
+
+    return jsonify(ok=True)
+
+
+@app.get("/api/admin/reset-requests")
+@admin_required
+def admin_reset_requests():
+
+    rows = get_db().execute(
+        "SELECT id, username, student_number, reset_requested_at AS requested, "
+        "reset_expires_at IS NOT NULL AND reset_expires_at > NOW() AS has_code "
+        "FROM users WHERE reset_requested_at IS NOT NULL "
+        "ORDER BY reset_requested_at DESC"
+    ).fetchall()
+
+    return jsonify(requests=[dict(row) for row in rows])
+
+
+@app.post("/api/admin/users/<int:user_id>/reset-code")
+@admin_required
+def admin_reset_code(user_id):
+
+    code = "".join(secrets.choice(RESET_CODE_ALPHABET) for _ in range(8))
+
+    db = get_db()
+
+    cursor = db.execute(
+        "UPDATE users SET reset_code_hash = %s, reset_attempts = 0, "
+        "reset_expires_at = NOW() + INTERVAL '24 hours', "
+        "reset_requested_at = COALESCE(reset_requested_at, NOW()) "
+        "WHERE id = %s",
+        (generate_password_hash(code), user_id),
+    )
+    db.commit()
+
+    if cursor.rowcount == 0:
+        return error("Not found.", 404)
+
+    # Shown to the admin once; only a hash is stored
+    return jsonify(code=code[:4] + "-" + code[4:], hours=RESET_CODE_HOURS)
+
+
+@app.post("/api/admin/users/<int:user_id>/reset-dismiss")
+@admin_required
+def admin_reset_dismiss(user_id):
+
+    db = get_db()
+
+    db.execute(
+        "UPDATE users SET reset_requested_at = NULL, reset_code_hash = '', "
+        "reset_expires_at = NULL, reset_attempts = 0 WHERE id = %s",
+        (user_id,),
+    )
+    db.commit()
+
+    return jsonify(ok=True)
+
+
+# =========================================================
+# ADMIN SYSTEM STATUS
+# Explains hosting problems (Vercel / Supabase / code) without
+# needing access to either dashboard. Never returns a key or
+# password, only whether each one is set and looks right.
+# =========================================================
+
+def describe_key(key):
+    """Which kind of Supabase key this is, without revealing it."""
+
+    if not key:
+        return "missing"
+
+    if key.startswith("sb_secret_"):
+        return "secret"
+
+    if key.startswith("sb_publishable_"):
+        return "publishable"
+
+    # Legacy keys are JWTs; the payload says which role they grant
+    try:
+        payload = key.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        role = json.loads(base64.urlsafe_b64decode(payload)).get("role")
+    except Exception:
+        return "unrecognised"
+
+    return {"service_role": "secret", "anon": "publishable"}.get(role, "unrecognised")
+
+
+def check(label, state, detail, hint=""):
+    return {"label": label, "state": state, "detail": detail, "hint": hint}
+
+
+def code_version():
+    """The deployed commit on Vercel, or the local checkout's commit."""
+
+    sha = os.environ.get("VERCEL_GIT_COMMIT_SHA", "")
+    branch = os.environ.get("VERCEL_GIT_COMMIT_REF", "")
+
+    if not sha:
+        try:
+            git_dir = os.path.join(BASE_DIR, ".git")
+            with open(os.path.join(git_dir, "HEAD"), encoding="utf-8") as file:
+                head = file.read().strip()
+            if head.startswith("ref: "):
+                ref = head[5:]
+                branch = ref.rsplit("/", 1)[-1]
+                with open(os.path.join(git_dir, ref), encoding="utf-8") as file:
+                    sha = file.read().strip()
+            else:
+                sha = head
+        except OSError:
+            pass
+
+    return sha[:7], branch
+
+
+@app.get("/api/admin/status")
+@admin_required
+def admin_status():
+
+    checks = []
+    on_vercel = bool(os.environ.get("VERCEL"))
+    sha, branch = code_version()
+
+    # ---------- Where and what is running ----------
+
+    if on_vercel:
+        where = "Vercel (" + os.environ.get("VERCEL_ENV", "unknown") + ")"
+    else:
+        where = "Local computer"
+
+    checks.append(check(
+        "Hosting",
+        "ok",
+        where,
+    ))
+
+    checks.append(check(
+        "Code version",
+        "ok" if sha else "warn",
+        (sha + (" on " + branch if branch else "")) if sha else "Unknown",
+        "" if sha else "Can't tell which commit is running. On Vercel, check the deployment's commit.",
+    ))
+
+    checks.append(check(
+        "Secret key",
+        "ok" if os.environ.get("SECRET_KEY") else ("fail" if on_vercel else "ok"),
+        "SECRET_KEY is set" if os.environ.get("SECRET_KEY") else "Using a local key file",
+        "Set SECRET_KEY in Vercel's environment variables, or logins break between servers."
+        if on_vercel and not os.environ.get("SECRET_KEY") else "",
+    ))
+
+    # ---------- Database ----------
+
+    db = get_db()
+
+    try:
+        version = db.execute("SHOW server_version").fetchone()["server_version"]
+        counts = db.execute(
+            "SELECT "
+            "(SELECT COUNT(*) FROM users) AS users, "
+            "(SELECT COUNT(*) FROM reviews) AS posts, "
+            "(SELECT COUNT(*) FROM reviews WHERE image <> '' OR video <> '') AS media_posts"
+        ).fetchone()
+        checks.append(check(
+            "Database",
+            "ok",
+            f"PostgreSQL {version} · {counts['users']} users · {counts['posts']} posts "
+            f"({counts['media_posts']} with media)",
+        ))
+    except Exception as exc:
+        db.rollback()
+        checks.append(check(
+            "Database",
+            "fail",
+            type(exc).__name__,
+            "Check DATABASE_URL.",
+        ))
+        counts = None
+
+    # ---------- Supabase Storage settings ----------
+
+    key_kind = describe_key(SUPABASE_SERVICE_ROLE_KEY)
+
+    if not SUPABASE_URL:
+        checks.append(check(
+            "Supabase URL",
+            "fail" if on_vercel else "warn",
+            "Not set",
+            "Set SUPABASE_URL on Vercel." if on_vercel
+            else "Not needed locally: uploads are saved in the uploads folder.",
+        ))
+    else:
+        host = SUPABASE_URL.split("//")[-1].split("/")[0]
+        bad_path = "/" in SUPABASE_URL.split("//")[-1]
+        checks.append(check(
+            "Supabase URL",
+            "warn" if bad_path else "ok",
+            host,
+            "SUPABASE_URL should be just https://<project>.supabase.co with nothing after it."
+            if bad_path else "",
+        ))
+
+    key_states = {
+        "secret": ("ok", "Secret (service role) key"),
+        "publishable": ("fail", "Publishable / anon key"),
+        "missing": ("fail" if on_vercel else "warn", "Not set"),
+        "unrecognised": ("warn", "Unrecognised key format"),
+    }
+    state, detail = key_states[key_kind]
+    checks.append(check(
+        "Supabase key",
+        state,
+        detail,
+        {
+            "publishable": "SUPABASE_SERVICE_ROLE_KEY must be the secret / service_role key. "
+                           "The anon key can't upload or sign links to a private bucket.",
+            "missing": "Set SUPABASE_SERVICE_ROLE_KEY on Vercel." if on_vercel
+                       else "Not needed locally: uploads are saved in the uploads folder.",
+            "unrecognised": "Copy the key again from Supabase → Project Settings → API Keys.",
+        }.get(key_kind, ""),
+    ))
+
+    # ---------- Bucket ----------
+
+    if supabase_client is not None:
+        try:
+            bucket = supabase_client.storage.get_bucket(SUPABASE_BUCKET)
+            public = getattr(bucket, "public", None)
+            checks.append(check(
+                "Storage bucket",
+                "ok",
+                f"“{SUPABASE_BUCKET}” found ({'public' if public else 'private'})",
+            ))
+        except Exception as exc:
+            checks.append(check(
+                "Storage bucket",
+                "fail",
+                f"Can't open “{SUPABASE_BUCKET}”: {type(exc).__name__}",
+                f"Create a bucket named exactly {SUPABASE_BUCKET} in Supabase Storage, "
+                "or check the key above.",
+            ))
+    elif not on_vercel:
+        checks.append(check(
+            "Storage bucket",
+            "ok",
+            "Local uploads folder",
+        ))
+
+    # ---------- Recent media: do the files still exist? ----------
+
+    if counts:
+        rows = db.execute(
+            "SELECT id, image, video FROM reviews "
+            "WHERE image LIKE '/media/%%' OR video LIKE '/media/%%' "
+            "ORDER BY created_at DESC LIMIT 15"
+        ).fetchall()
+
+        missing = []
+        sample = None
+
+        for row in rows:
+            for url, kind in ((row["image"], "image"), (row["video"], "video")):
+                if url.startswith("/media/"):
+                    info = stored_media_info(url, kind)
+                    if info is None:
+                        missing.append(row["id"])
+                    elif sample is None and info["local_path"] is None:
+                        sample = info["name"]
+
+        checked = len(rows)
+
+        if checked == 0:
+            checks.append(check(
+                "Recent media files",
+                "ok",
+                "No posts with uploaded media yet",
+            ))
+        else:
+            checks.append(check(
+                "Recent media files",
+                "fail" if missing else "ok",
+                f"{checked - len(set(missing))} of {checked} recent media posts have their file"
+                + (f" · missing on posts {', '.join(map(str, sorted(set(missing))))}" if missing else ""),
+                "Those files no longer exist. Posts made before Supabase Storage was added "
+                "were saved to Vercel's temporary disk, which is wiped; those can't be recovered."
+                if missing else "",
+            ))
+
+        # ---------- Can a browser actually load one? ----------
+
+        if sample:
+            try:
+                result = supabase_client.storage.from_(SUPABASE_BUCKET).create_signed_url(sample, 60)
+                signed = (
+                    result.get("signedURL") or result.get("signedUrl") or result.get("signed_url") or ""
+                )
+                if signed.startswith("/"):
+                    signed = SUPABASE_URL + ("" if signed.startswith("/storage/v1/") else "/storage/v1") + signed
+                with urllib.request.urlopen(
+                    urllib.request.Request(signed, headers={"Range": "bytes=0-0"}),
+                    timeout=8,
+                ) as response:
+                    status = response.status
+                checks.append(check(
+                    "Media link test",
+                    "ok",
+                    f"Signed link for a recent file returned HTTP {status}",
+                ))
+            except urllib.error.HTTPError as exc:
+                checks.append(check(
+                    "Media link test",
+                    "fail",
+                    f"Supabase returned HTTP {exc.code} for a signed link",
+                    "The file exists but Supabase refused the link. Check the key and the bucket's policies.",
+                ))
+            except Exception as exc:
+                checks.append(check(
+                    "Media link test",
+                    "fail",
+                    f"Couldn't create or open a signed link: {type(exc).__name__}",
+                    "Check SUPABASE_URL and the key.",
+                ))
+
+    # ---------- Vercel upload size ----------
+
+    if on_vercel:
+        checks.append(check(
+            "Upload size limit",
+            "warn",
+            f"Vercel rejects uploads over 4.5 MB; the app allows videos up to {MAX_VIDEO_BYTES // MB} MB",
+            "Large videos will fail to upload on Vercel. Photos are compressed and usually fit.",
+        ))
+
+    worst = (
+        "fail" if any(c["state"] == "fail" for c in checks)
+        else "warn" if any(c["state"] == "warn" for c in checks)
+        else "ok"
+    )
+
+    return jsonify(overall=worst, checks=checks)
 init_db()
 
 
