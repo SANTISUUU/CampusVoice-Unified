@@ -171,7 +171,6 @@
             <button
                 type="button"
                 class="forgot-link"
-                hidden
                 onclick="showForgot()">
 
                 Forgot password?
@@ -272,69 +271,6 @@
 
         <!-- FORGOT PASSWORD -->
 
-        <div id="forgotForm" class="hidden">
-
-            <!-- Step 1: ask an admin for a code -->
-
-            <div id="forgotRequest">
-
-                <h2>Forgot your password?</h2>
-
-                <p class="auth-description">
-                    Enter your username and student number. An admin
-                    will give you a one-time reset code in person.
-                </p>
-
-                <input class="auth-input" id="forgotUsername" type="text" placeholder="Username" autocomplete="username">
-
-                <input class="auth-input" id="forgotStudentNumber" type="text" inputmode="numeric" maxlength="11" placeholder="Student Number (e.g. 21-0123-456)">
-
-                <button class="auth-submit" onclick="requestPasswordReset()">Request reset</button>
-
-                <p class="auth-switch">
-                    Already have a code?
-                    <span onclick="showForgotStep('code')">Enter it</span>
-                </p>
-
-            </div>
-
-
-            <!-- Step 2: use the code -->
-
-            <div id="forgotCode" class="hidden">
-
-                <h2>Set a new password</h2>
-
-                <p class="auth-description" id="forgotCodeNote">
-                    Enter the reset code an admin gave you. Codes work
-                    for 24 hours.
-                </p>
-
-                <input class="auth-input" id="resetUsername" type="text" placeholder="Username" autocomplete="username">
-
-                <input class="auth-input reset-code-input" id="resetCode" type="text" maxlength="9" placeholder="Reset code (e.g. ABCD-2345)" autocomplete="one-time-code" autocapitalize="characters">
-
-                <input class="auth-input" id="resetPassword" type="password" placeholder="New password (at least 6 characters)" autocomplete="new-password">
-
-                <input class="auth-input" id="resetConfirm" type="password" placeholder="Confirm new password" autocomplete="new-password">
-
-                <button class="auth-submit" onclick="completePasswordReset()">Save new password</button>
-
-                <p class="auth-switch">
-                    Need a code first?
-                    <span onclick="showForgotStep('request')">Request one</span>
-                </p>
-
-            </div>
-
-            <p class="auth-switch">
-                Remembered it?
-                <span onclick="showLogin()">Log In</span>
-            </p>
-
-        </div>
-
-
         <div class="auth-divider">
 
             <span>or</span>
@@ -371,6 +307,170 @@
 
 </section>
 
+
+
+<!-- =========================================================
+     FORGOT PASSWORD PAGE
+     Same layout as the guest page. The student sends a request;
+     an admin contacts them to verify, then approves it.
+========================================================= -->
+
+<section id="forgotPage" style="display:none">
+
+    <div class="auth-card guest-card">
+
+        <div class="auth-logo">
+            Campus<span>Voice</span>
+        </div>
+
+        <form id="forgotForm" novalidate onsubmit="forgotNext(event)">
+
+            <p class="forgot-steps" id="forgotStepLabel">Step 1 of 3</p>
+
+            <!-- STEP 1: STUDENT NUMBER -->
+
+            <div class="forgot-step" id="forgotStep1">
+
+                <h2>Forgot your password?</h2>
+
+                <p class="auth-description">
+                    Enter your student number so we can find your account.
+                </p>
+
+                <div class="guest-question">
+
+                    <label class="guest-label" for="forgotStudentNumber">
+                        Student number <span class="guest-asterisk">*</span>
+                    </label>
+
+                    <input class="auth-input" id="forgotStudentNumber" type="text" inputmode="numeric" maxlength="11" placeholder="e.g. 21-0123-456" autocomplete="username">
+
+                    <span class="guest-error" id="forgotStudentNumberError"></span>
+
+                </div>
+
+            </div>
+
+            <!-- STEP 2: NEW PASSWORD -->
+
+            <div class="forgot-step hidden" id="forgotStep2">
+
+                <h2>Please nominate your new password</h2>
+
+                <p class="auth-description">
+                    This becomes your password once an admin verifies the request.
+                </p>
+
+                <div class="guest-question">
+
+                    <label class="guest-label" for="forgotPassword">
+                        New password <span class="guest-asterisk">*</span>
+                    </label>
+
+                    <input class="auth-input" id="forgotPassword" type="password" maxlength="128" placeholder="At least 6 characters" autocomplete="new-password">
+
+                    <span class="guest-error" id="forgotPasswordError"></span>
+
+                    <label class="guest-label" for="forgotConfirm">
+                        Confirm new password <span class="guest-asterisk">*</span>
+                    </label>
+
+                    <input class="auth-input" id="forgotConfirm" type="password" maxlength="128" placeholder="Type it again" autocomplete="new-password">
+
+                    <span class="guest-error" id="forgotConfirmError"></span>
+
+                </div>
+
+            </div>
+
+            <!-- STEP 3: CONTACT -->
+
+            <div class="forgot-step hidden" id="forgotStep3">
+
+                <h2>How should we reach you?</h2>
+
+                <p class="auth-description">
+                    An admin will contact you to confirm it's really you before
+                    changing your password.
+                </p>
+
+                <div class="guest-question">
+
+                    <span class="guest-label">
+                        Contact method <span class="guest-asterisk">*</span>
+                    </span>
+
+                    <div class="guest-contact-types" role="radiogroup" aria-label="Contact type">
+
+                    <label class="guest-chip">
+                        <input type="radio" name="forgotContactType" value="email" onchange="updateForgotContactInput()" checked>
+                        <span>Email</span>
+                    </label>
+
+                    <label class="guest-chip">
+                        <input type="radio" name="forgotContactType" value="mobile" onchange="updateForgotContactInput()">
+                        <span>Mobile no.</span>
+                    </label>
+
+                    <label class="guest-chip">
+                        <input type="radio" name="forgotContactType" value="facebook" onchange="updateForgotContactInput()">
+                        <span>Facebook</span>
+                    </label>
+
+                    </div>
+
+                    <input class="auth-input" id="forgotContact" type="email" maxlength="254" placeholder="e.g. juan@example.com" aria-label="Contact details">
+
+                    <span class="guest-error" id="forgotContactError"></span>
+
+                </div>
+
+                <p class="guest-privacy">
+                    🔒 Your contact details will only be used to verify this request.
+                </p>
+
+            </div>
+
+            <span class="guest-error guest-form-error" id="forgotFormError"></span>
+
+            <div class="forgot-nav">
+
+                <button type="button" class="back-home hidden" id="forgotBack" onclick="forgotBack()">
+                    ← Back
+                </button>
+
+                <button type="submit" class="auth-submit" id="forgotSubmit">
+                    Next
+                </button>
+
+            </div>
+
+        </form>
+
+        <!-- CONFIRMATION -->
+
+        <div id="forgotThanks" class="guest-thanks hidden">
+
+            <div class="guest-thanks-icon">✓</div>
+
+            <h2>Request sent!</h2>
+
+            <p class="auth-description">
+                An admin will contact you through the details you gave to verify
+                it's you. Once approved, log in with your new password.
+            </p>
+
+            <p class="guest-role-badge" id="forgotThanksContact"></p>
+
+        </div>
+
+        <button class="back-home" onclick="forgotBackToLogin()">
+            ← Back to login
+        </button>
+
+    </div>
+
+</section>
 
 
 <!-- =========================================================
@@ -980,14 +1080,13 @@
         <div id="adminGuests"></div>
     </section>
 
-    <!-- Password reset: hidden until the feature is finished -->
-    <section class="sys-panel" aria-labelledby="resetTitle" hidden>
+    <section class="sys-panel" aria-labelledby="resetTitle">
         <div class="sys-head">
             <span class="msr" aria-hidden="true">key</span>
             <b id="resetTitle">Password reset requests</b>
             <span class="mono reset-count" id="resetCount"></span>
         </div>
-        <p class="sys-intro">Check it's really the student (in person or their school account), then create a one-time code and give it to them. Codes last 24 hours.</p>
+        <p class="sys-intro">Contact the student using the details they gave and confirm it's really them. Approve sets the password they chose; Reject leaves their current password.</p>
         <ul class="sys-list" id="resetList"></ul>
     </section>
 

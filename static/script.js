@@ -52,7 +52,7 @@ function showLogin() {
         .getElementById("signupForm")
         .classList.add("hidden");
 
-    document.getElementById("forgotForm").classList.add("hidden");
+    document.getElementById("forgotPage").style.display = "none";
 }
 
 
@@ -76,7 +76,7 @@ function showSignup() {
         .getElementById("signupForm")
         .classList.remove("hidden");
 
-    document.getElementById("forgotForm").classList.add("hidden");
+    document.getElementById("forgotPage").style.display = "none";
 }
 
 
@@ -1751,6 +1751,8 @@ const GUEST_CONTACT_TYPES = {
 
 function showGuest() {
 
+    document.getElementById("forgotPage").style.display = "none";
+
     landingPage.style.display = "none";
 
     authPage.style.display = "none";
@@ -2303,7 +2305,7 @@ async function showAdmin() {
 
     loadSystemStatus();
 
-    // loadResetRequests();  // password reset is hidden for now
+    loadResetRequests();
 
     await loadAdmin();
 }
@@ -2707,137 +2709,219 @@ async function loadSystemStatus() {
 
 /* =========================================================
    FORGOT PASSWORD
-   No email service: an admin creates a one-time code from the
-   dashboard and gives it to the student.
+   Three steps, laid out like the guest page:
+   1. student number  2. new password  3. how to reach them.
+   An admin contacts the student to verify, then approves it.
 ========================================================= */
+
+let forgotStep = 1;
+
 
 function showForgot() {
 
-    const name = document.getElementById("loginUsername").value.trim();
+    landingPage.style.display = "none";
 
-    document.getElementById("loginForm").classList.add("hidden");
+    authPage.style.display = "none";
 
-    document.getElementById("signupForm").classList.add("hidden");
+    mainPage.style.display = "none";
 
-    document.getElementById("forgotForm").classList.remove("hidden");
+    hideGuestPage();
 
-    document.getElementById("forgotUsername").value = name;
+    document.getElementById("forgotPage").style.display = "flex";
 
-    document.getElementById("resetUsername").value = name;
+    resetForgotForm();
 
-    showForgotStep("request");
+    window.scrollTo(0, 0);
+}
+
+
+function forgotBackToLogin() {
+
+    resetForgotForm();
+
+    showLogin();
+}
+
+
+function resetForgotForm() {
+
+    const form = document.getElementById("forgotForm");
+
+    form.reset();
+
+    form.classList.remove("hidden");
+
+    document.getElementById("forgotThanks").classList.add("hidden");
+
+    clearForgotErrors();
+
+    updateForgotContactInput();
+
+    showForgotStep(1);
 }
 
 
 function showForgotStep(step) {
 
-    document.getElementById("forgotRequest").classList.toggle("hidden", step !== "request");
+    forgotStep = step;
 
-    document.getElementById("forgotCode").classList.toggle("hidden", step !== "code");
+    [1, 2, 3].forEach(n => {
+        document.getElementById("forgotStep" + n).classList.toggle("hidden", n !== step);
+    });
 
-    const focus = step === "request" ? "forgotUsername" : "resetCode";
+    document.getElementById("forgotStepLabel").textContent = "Step " + step + " of 3";
 
-    const field = document.getElementById(focus);
+    document.getElementById("forgotBack").classList.toggle("hidden", step === 1);
 
-    if (step === "code" && !document.getElementById("resetUsername").value) {
-        document.getElementById("resetUsername").focus();
-    } else {
-        field.focus();
+    document.getElementById("forgotSubmit").textContent = step === 3 ? "Submit request" : "Next";
+
+    const focus = { 1: "forgotStudentNumber", 2: "forgotPassword", 3: "forgotContact" }[step];
+
+    setTimeout(() => document.getElementById(focus).focus(), 30);
+}
+
+
+function forgotBack() {
+
+    clearForgotErrors();
+
+    if (forgotStep > 1) {
+        showForgotStep(forgotStep - 1);
     }
 }
 
 
-async function requestPasswordReset() {
+function clearForgotErrors() {
 
-    const username = document.getElementById("forgotUsername").value.trim();
+    ["forgotStudentNumber", "forgotPassword", "forgotConfirm", "forgotContact"]
+        .forEach(id => setGuestError(id, ""));
 
-    const studentNumber = document.getElementById("forgotStudentNumber").value.trim();
+    document.getElementById("forgotFormError").textContent = "";
+}
 
-    if (!username || !studentNumber) {
 
-        showToast("Please enter your username and student number.");
+function getForgotContactType() {
+
+    const checked = document.querySelector('input[name="forgotContactType"]:checked');
+
+    return checked ? checked.value : "";
+}
+
+
+function updateForgotContactInput() {
+
+    const config = GUEST_CONTACT_TYPES[getForgotContactType()];
+
+    if (!config) {
+        return;
+    }
+
+    const input = document.getElementById("forgotContact");
+
+    input.type = config.inputType;
+    input.inputMode = config.inputMode;
+    input.maxLength = config.maxLength;
+    input.placeholder = config.placeholder;
+    input.value = "";
+
+    setGuestError("forgotContact", "");
+}
+
+
+// Next on steps 1 and 2, submit on step 3
+async function forgotNext(event) {
+
+    event.preventDefault();
+
+    clearForgotErrors();
+
+    if (forgotStep === 1) {
+
+        const number = document.getElementById("forgotStudentNumber").value.trim();
+
+        if (!/^[0-9]{2}-[0-9]{4}-[0-9]{3}$/.test(number)) {
+
+            setGuestError("forgotStudentNumber", "Please enter your student number like 21-0123-456.");
+
+            return;
+        }
+
+        showForgotStep(2);
 
         return;
     }
+
+    if (forgotStep === 2) {
+
+        const password = document.getElementById("forgotPassword").value;
+
+        const confirm = document.getElementById("forgotConfirm").value;
+
+        if (password.length < 6) {
+
+            setGuestError("forgotPassword", "Password must contain at least 6 characters.");
+
+            return;
+        }
+
+        if (password !== confirm) {
+
+            setGuestError("forgotConfirm", "The two passwords don't match.");
+
+            return;
+        }
+
+        showForgotStep(3);
+
+        return;
+    }
+
+    const type = getForgotContactType();
+
+    const contact = validateGuestContact(type, document.getElementById("forgotContact").value);
+
+    if (contact.error) {
+
+        setGuestError("forgotContact", contact.error);
+
+        return;
+    }
+
+    const button = document.getElementById("forgotSubmit");
+
+    button.disabled = true;
 
     try {
 
         await api("/api/password-reset/request", {
-            username: username,
-            student_number: studentNumber
+            student_number: document.getElementById("forgotStudentNumber").value.trim(),
+            password: document.getElementById("forgotPassword").value,
+            contact_type: type,
+            contact_value: contact.value
         });
 
     } catch (failure) {
 
-        showToast(failure.message);
+        document.getElementById("forgotFormError").textContent = failure.message;
 
         return;
+
+    } finally {
+
+        button.disabled = false;
     }
 
-    document.getElementById("resetUsername").value = username;
+    const label = (GUEST_CONTACT_META[type] || [type])[0];
 
-    document.getElementById("forgotCodeNote").textContent =
-        "Request sent. If the details matched, an admin will see it and give " +
-        "you a reset code. Enter it here (codes work for 24 hours).";
+    document.getElementById("forgotThanksContact").textContent =
+        "We'll reach you by " + label + ": " + contact.value;
 
-    showToast("Reset request sent to the admins.", { tone: "success", icon: "key" });
+    // Don't keep the password in the page after sending it
+    document.getElementById("forgotForm").reset();
 
-    showForgotStep("code");
-}
+    document.getElementById("forgotForm").classList.add("hidden");
 
-
-async function completePasswordReset() {
-
-    const username = document.getElementById("resetUsername").value.trim();
-
-    const code = document.getElementById("resetCode").value.trim();
-
-    const password = document.getElementById("resetPassword").value;
-
-    const confirm = document.getElementById("resetConfirm").value;
-
-    if (!username || !code || !password) {
-
-        showToast("Please fill in your username, reset code and new password.");
-
-        return;
-    }
-
-    if (password !== confirm) {
-
-        showToast("The two passwords don't match.");
-
-        return;
-    }
-
-    try {
-
-        await api("/api/password-reset/complete", {
-            username: username,
-            code: code,
-            password: password
-        });
-
-    } catch (failure) {
-
-        showToast(failure.message);
-
-        return;
-    }
-
-    ["resetCode", "resetPassword", "resetConfirm"].forEach(id => {
-        document.getElementById(id).value = "";
-    });
-
-    showLogin();
-
-    document.getElementById("loginUsername").value = username;
-
-    document.getElementById("loginPassword").value = "";
-
-    document.getElementById("loginPassword").focus();
-
-    showToast("Password saved. Log in with your new password.", { tone: "success" });
+    document.getElementById("forgotThanks").classList.remove("hidden");
 }
 
 
@@ -2867,37 +2951,45 @@ async function loadResetRequests() {
 
         list.innerHTML =
             '<li class="sys-item is-ok"><span class="sys-ico">' + icon("check_circle", "fill") +
-            '</span><span class="sys-text"><b>No requests</b><span>Nobody is waiting for a password reset.</span></span></li>';
+            '</span><span class="sys-text"><b>No requests</b><span>Nobody is waiting for a password change.</span></span></li>';
 
         return;
     }
 
     list.innerHTML = data.requests
-        .map(request =>
-            '<li class="sys-item reset-item" id="reset-' + request.id + '">' +
-            '<span class="avatar avatar-xs" style="background:' + avatarColor(request.username) + '" aria-hidden="true">' +
-            escapeHTML(initialsOf(request.username)) + "</span>" +
-            '<span class="sys-text"><b>' + escapeHTML(request.username) + "</b>" +
-            "<span>" + escapeHTML(request.student_number) + " · requested " + escapeHTML(relTime(request.requested)) +
-            (request.has_code ? " · code already given" : "") + "</span>" +
-            '<span class="reset-code-out" id="resetOut-' + request.id + '"></span></span>' +
-            '<span class="reset-actions">' +
-            '<button type="button" class="btn btn-primary btn-sm" onclick="createResetCode(' + request.id + ')">' +
-            icon("key") + (request.has_code ? "New code" : "Create code") + "</button>" +
-            '<button type="button" class="btn btn-ghost btn-sm" onclick="dismissReset(' + request.id + ')">Dismiss</button>' +
-            "</span></li>"
-        )
+        .map(request => {
+
+            const name = request.username || "No account found";
+
+            const meta = GUEST_CONTACT_META[request.contact_type] || [request.contact_type, "contact_page"];
+
+            const actions = request.username
+                ? '<button type="button" class="btn btn-primary btn-sm" onclick="resolveReset(' + request.id + ', &quot;approve&quot;)">' +
+                  icon("check") + "Approve</button>" +
+                  '<button type="button" class="btn btn-ghost btn-sm" onclick="resolveReset(' + request.id + ', &quot;reject&quot;)">Reject</button>'
+                : '<button type="button" class="btn btn-ghost btn-sm" onclick="resolveReset(' + request.id + ', &quot;reject&quot;)">Dismiss</button>';
+
+            return '<li class="sys-item reset-item">' +
+                '<span class="avatar avatar-xs" style="background:' + avatarColor(name) + '" aria-hidden="true">' +
+                escapeHTML(request.username ? initialsOf(request.username) : "?") + "</span>" +
+                '<span class="sys-text"><b>' + escapeHTML(name) + "</b>" +
+                "<span>" + escapeHTML(request.student_number) + " · requested " + escapeHTML(relTime(request.requested)) + "</span>" +
+                '<span class="reset-contact">' + icon(meta[1]) + escapeHTML(meta[0]) + ": " +
+                '<span class="reset-contact-value">' + escapeHTML(request.contact_value) + "</span></span>" +
+                (request.username ? "" :
+                    '<span class="reset-warn">No account has this student number. Contact them to explain.</span>') +
+                "</span>" +
+                '<span class="reset-actions">' + actions + "</span></li>";
+        })
         .join("");
 }
 
 
-async function createResetCode(id) {
-
-    let data;
+async function resolveReset(id, action) {
 
     try {
 
-        data = await api("/api/admin/users/" + id + "/reset-code", {});
+        await api("/api/admin/reset-requests/" + id + "/" + action, {});
 
     } catch (failure) {
 
@@ -2906,25 +2998,12 @@ async function createResetCode(id) {
         return;
     }
 
-    // Shown once; the server only keeps a hash of it
-    document.getElementById("resetOut-" + id).innerHTML =
-        'Give this code to the student: <code class="reset-code">' + escapeHTML(data.code) + "</code>" +
-        " (works for " + data.hours + " hours, shown only once)";
-}
-
-
-async function dismissReset(id) {
-
-    try {
-
-        await api("/api/admin/users/" + id + "/reset-dismiss", {});
-
-    } catch (failure) {
-
-        showToast(failure.message);
-
-        return;
-    }
+    showToast(
+        action === "approve"
+            ? "Password changed. Let the student know they can log in."
+            : "Request rejected.",
+        { tone: "success", icon: action === "approve" ? "key" : "close" }
+    );
 
     loadResetRequests();
 }

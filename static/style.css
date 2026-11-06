@@ -301,7 +301,8 @@ button {
 ========================================================= */
 
 #authPage,
-#guestPage {
+#guestPage,
+#forgotPage {
     min-height: 100vh;
     display: none;
     align-items: center;
@@ -646,7 +647,8 @@ button {
         padding: 24px;
     }
 
-    #guestPage {
+    #guestPage,
+    #forgotPage {
         padding: 14px;
         align-items: flex-start;
     }
@@ -3976,10 +3978,34 @@ body.has-modal {
     text-underline-offset: 3px;
 }
 
-.reset-code-input {
-    font-family: var(--mono);
-    letter-spacing: 0.12em;
+.forgot-steps {
+    margin: 0 0 6px;
+    font: 700 12px var(--mono);
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.forgot-step .guest-label + .auth-input {
+    margin-top: 8px;
+}
+
+.forgot-step .guest-error + .guest-label {
+    margin-top: 14px;
+}
+
+.forgot-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.forgot-nav .auth-submit {
+    flex: 1;
+}
+
+.forgot-nav .back-home {
+    margin: 0;
 }
 
 .reset-item {
@@ -3996,26 +4022,25 @@ body.has-modal {
     gap: 6px;
 }
 
-.reset-code-out:empty {
-    display: none;
+.reset-contact {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ink);
+    font-weight: 600;
 }
 
-.reset-code {
-    padding: 2px 8px;
-    border-radius: 8px;
-    background: var(--accent);
-    font: 700 16px var(--mono);
-    letter-spacing: 0.08em;
+.reset-contact-value {
     user-select: all;
+    word-break: break-all;
+}
+
+.reset-warn {
+    color: var(--danger);
+    font-weight: 600;
 }
 
 .reset-count {
     font-weight: 700;
     color: var(--ink-muted);
-}
-
-/* Keep the hidden attribute stronger than component display rules */
-.forgot-link[hidden],
-.sys-panel[hidden] {
-    display: none;
 }
