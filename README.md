@@ -1,6 +1,6 @@
 # CampusVoice — Unified Flask Codebase
 
-This is the consolidated local Flask version, combining the main CampusVoice app with the media upload/compression implementation. It is **not yet converted to Vercel/Supabase**; that is the next phase.
+This is the consolidated Flask version, using Supabase PostgreSQL and Storage for deployment on Vercel.
 
 ## Included features
 
@@ -19,15 +19,15 @@ This is the consolidated local Flask version, combining the main CampusVoice app
 1. Install Python 3.10+ (recommended)
 2. Create and activate a virtual environment
 3. Install dependencies: `pip install -r requirements.txt`
-4. Set `SECRET_KEY` in your environment (recommended) or let the local development key file be generated automatically
+4. Copy `.env.example` to `.env`, then set `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `SECRET_KEY`
 5. Run: `python app.py`
 6. Open `http://127.0.0.1:5000`
 
-The local SQLite database and uploaded files are created on disk. Do not rely on these local folders for serverless production hosting; the Vercel/Supabase conversion should replace these with persistent Supabase database and storage services.
+For `DATABASE_URL`, open the correct Supabase project, choose **Connect → Transaction pooler**, and copy the entire value. Replace only the password placeholder, URL-encoding reserved password characters such as `#`, `?`, `&`, and spaces. Do not construct an `aws-…pooler.supabase.com` host from the region: Supabase assigns the pooler cluster.
 
 ## Important deployment note
 
-This folder is the merge checkpoint. Before deploying, migrate SQLite queries/schema to Supabase/Postgres, move uploaded media to Supabase Storage, configure production secrets, and add Vercel's Python/Flask entry configuration.
+In Vercel, configure the same four variables under **Project Settings → Environment Variables** for Production (and Preview if you use previews), then redeploy. Use the exact same current connection URL from Supabase—not an older URL copied from another project or a manually typed pooler host. `SUPABASE_SECRET_KEY` is server-only and must never be put in frontend JavaScript. The app uses SSL and disables prepared statements, which makes it compatible with the transaction pooler.
 
 
 ## Verification checklist

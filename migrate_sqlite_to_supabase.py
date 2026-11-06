@@ -82,7 +82,15 @@ def main():
     finally:
         sqlite_db.close()
 
-    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as pg:
+    # The deployment URL uses Supabase's transaction pooler. Prepared
+    # statements are not supported there, so disable psycopg auto-prepare.
+    with psycopg.connect(
+        DATABASE_URL,
+        row_factory=dict_row,
+        connect_timeout=10,
+        sslmode="require",
+        prepare_threshold=None,
+    ) as pg:
         # Keep the schema up to date before checking target counts.
         from app import SCHEMA
         for statement in SCHEMA.split(";"):
