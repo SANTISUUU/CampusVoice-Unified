@@ -4044,3 +4044,191 @@ body.has-modal {
     font-weight: 700;
     color: var(--ink-muted);
 }
+
+
+/* ---------- Edit / delete posts ---------- */
+
+.edited-tag {
+    margin-left: 4px;
+    font-size: 13px;
+    color: var(--ink-muted);
+}
+
+.act-tool {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+    color: var(--ink-muted);
+}
+
+.act-first {
+    margin-left: auto;
+}
+
+.act-tool:hover {
+    color: var(--ink);
+}
+
+.act-delete:hover {
+    background: var(--danger-tint);
+    color: var(--danger);
+}
+
+/* Editing keeps the existing photo; the uploader is for new posts */
+.modal-compose.is-editing .upload-box,
+.modal-compose.is-editing .upload-hint {
+    display: none;
+}
+
+.edit-remove-media {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.edit-remove-media.hidden {
+    display: none;
+}
+
+.edit-remove-media input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--danger);
+}
+
+
+/* ---------- Threaded replies ---------- */
+
+.reply-node {
+    display: grid;
+    gap: 10px;
+}
+
+.reply-main {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.reply-children {
+    display: grid;
+    gap: 10px;
+    margin-left: 18px;
+    padding-left: 12px;
+    border-left: 2px solid var(--line);
+}
+
+.reply-children.is-flat {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: none;
+}
+
+.reply-actions {
+    display: flex;
+    gap: 2px;
+    padding-left: 4px;
+}
+
+.reply-act {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding: 0 8px;
+    border: none;
+    border-radius: var(--pill);
+    background: transparent;
+    color: var(--ink-muted);
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.reply-act .msr {
+    font-size: 16px;
+}
+
+.reply-act:hover {
+    background: var(--skeleton-soft);
+    color: var(--ink);
+}
+
+.reply-act-delete:hover {
+    background: var(--danger-tint);
+    color: var(--danger);
+}
+
+.reply-to {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--brand);
+    font-weight: 700;
+}
+
+.reply-to .msr {
+    font-size: 15px;
+}
+
+.reply-bubble.is-deleted {
+    border-style: dashed;
+    background: transparent;
+}
+
+.reply-bubble.is-deleted .reply-text {
+    color: var(--ink-muted);
+    font-style: italic;
+}
+
+.avatar-gone {
+    display: grid;
+    place-items: center;
+    background: var(--line);
+    color: var(--ink-muted);
+}
+
+.avatar-gone .msr {
+    font-size: 16px;
+}
+
+.reply-box {
+    flex-wrap: wrap;
+}
+
+.reply-target {
+    flex-basis: 100%;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--brand);
+}
+
+.reply-target.hidden {
+    display: none;
+}
+
+.reply-target .msr {
+    font-size: 16px;
+}
+
+.reply-target button {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ink-muted);
+}
+
+.reply-target button:hover {
+    background: var(--skeleton-soft);
+}

@@ -284,6 +284,13 @@ function closeModal(id) {
 
     modal.classList.add("hidden");
 
+    // Lets a dialog answer "cancelled" when closed by Esc or the backdrop
+    if (typeof modal.onDismiss === "function") {
+        const done = modal.onDismiss;
+        modal.onDismiss = null;
+        done();
+    }
+
     if (!document.querySelector(".modal:not(.hidden)")) {
         document.body.classList.remove("has-modal");
     }
@@ -380,3 +387,71 @@ document.addEventListener("click", event => {
         openPhotoViewer(photo.currentSrc || photo.src, photo.alt);
     }
 });
+
+
+/* =========================================================
+   CONFIRM DIALOG
+   await confirmDialog({ title, body, confirm }) -> true/false
+========================================================= */
+
+function confirmDialog(options) {
+
+    let modal = document.getElementById("confirmModal");
+
+    if (!modal) {
+
+        modal = document.createElement("div");
+
+        modal.id = "confirmModal";
+        modal.className = "modal hidden";
+        modal.setAttribute("role", "alertdialog");
+        modal.setAttribute("aria-modal", "true");
+        modal.setAttribute("aria-labelledby", "confirmTitle");
+        modal.setAttribute("aria-describedby", "confirmBody");
+
+        modal.innerHTML =
+            '<div class="dialog dialog-sm">' +
+            '<div class="dialog-head"><h2 id="confirmTitle"></h2></div>' +
+            '<div class="dialog-body"><p class="dialog-copy" id="confirmBody"></p></div>' +
+            '<div class="dialog-foot">' +
+            '<button type="button" class="btn btn-ghost" id="confirmCancel" data-autofocus>Cancel</button>' +
+            '<button type="button" class="btn btn-danger" id="confirmOk"></button>' +
+            "</div></div>";
+
+        document.body.appendChild(modal);
+    }
+
+    modal.querySelector("#confirmTitle").textContent = options.title || "Are you sure?";
+
+    modal.querySelector("#confirmBody").textContent = options.body || "";
+
+    modal.querySelector("#confirmOk").innerHTML = icon("delete") + escapeAttr(options.confirm || "Delete");
+
+    return new Promise(resolve => {
+
+        let answered = false;
+
+        function finish(value) {
+
+            if (answered) {
+                return;
+            }
+
+            answered = true;
+
+            modal.onDismiss = null;
+
+            closeModal("confirmModal");
+
+            resolve(value);
+        }
+
+        modal.onDismiss = () => finish(false);
+
+        modal.querySelector("#confirmCancel").onclick = () => finish(false);
+
+        modal.querySelector("#confirmOk").onclick = () => finish(true);
+
+        openModal("confirmModal");
+    });
+}

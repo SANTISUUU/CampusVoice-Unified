@@ -509,6 +509,8 @@ function openCompose(area) {
         return;
     }
 
+    exitEditMode();
+
     if (area && AREAS[area]) {
         chooseArea(area);
     } else if (AREAS[currentArea]) {
@@ -574,6 +576,13 @@ async function postReview() {
     if (!currentUser) {
 
         showToast("Please log in first.");
+
+        return;
+    }
+
+    if (editingId !== null) {
+
+        await saveEdit();
 
         return;
     }
@@ -1186,19 +1195,7 @@ function renderReview(
     }
 
 
-    const repliesHTML = review.replies
-        .map(reply =>
-            '<div class="reply">' +
-            '<span class="avatar avatar-sm" style="background:' + avatarColor(reply.username) + '" aria-hidden="true">' +
-            escapeHTML(initialsOf(reply.username)) + "</span>" +
-            '<div class="reply-bubble">' +
-            '<span class="reply-meta"><b>' + escapeHTML(reply.username) + "</b>" +
-            (reply.date ? " <span>· " + escapeHTML(relTime(reply.date)) + "</span>" : "") +
-            "</span>" +
-            '<span class="reply-text">' + escapeHTML(reply.text) + "</span>" +
-            "</div></div>"
-        )
-        .join("");
+    const repliesHTML = renderReplyTree(review);
 
 
     const liked = review.my_reaction === "like";
@@ -1207,7 +1204,17 @@ function renderReview(
 
     const me = currentUser ? currentUser.username : "";
 
-    const replyCount = review.replies.length;
+    const replyCount = review.replies.filter(reply => !reply.deleted).length;
+
+    const canDelete = review.mine || !!(currentUser && currentUser.is_admin);
+
+    const ownerActions =
+        (review.mine
+            ? `<button type="button" class="act act-tool act-first" aria-label="Edit post" title="Edit post" onclick="editPost(${review.id})">${icon("edit")}</button>`
+            : `<button type="button" class="act act-report" aria-label="Report post" title="Report post" onclick="reportReview(${review.id})">${icon("flag")}</button>`) +
+        (canDelete
+            ? `<button type="button" class="act act-tool act-delete" aria-label="Delete post" title="Delete post" onclick="deletePost(${review.id})">${icon("delete")}</button>`
+            : "");
 
 
     element.innerHTML = `
@@ -1215,7 +1222,7 @@ function renderReview(
             <span class="avatar" style="background:${avatarColor(review.username)}" aria-hidden="true">${escapeHTML(initialsOf(review.username))}</span>
             <div class="post-who">
                 <b>${escapeHTML(review.username)}</b>
-                <time datetime="${escapeAttr(review.date)}" title="${escapeAttr(formatDate(review.date))}">${escapeHTML(relTime(review.date))}</time>
+                <time datetime="${escapeAttr(review.date)}" title="${escapeAttr(formatDate(review.date))}">${escapeHTML(relTime(review.date))}</time>${review.edited ? `<span class="edited-tag" title="Edited ${escapeAttr(formatDate(review.edited))}">· edited</span>` : ""}
             </div>
             ${status}
         </div>
@@ -1230,11 +1237,12 @@ function renderReview(
             <button type="button" class="act${liked ? " is-liked" : ""}" aria-pressed="${liked}" aria-label="${liked ? "Unlike" : "Like"}, ${review.likes} likes" onclick="likeReview(${review.id})">${icon("thumb_up", liked ? "fill" : "")}${review.likes}</button>
             <button type="button" class="act${disliked ? " is-disliked" : ""}" aria-pressed="${disliked}" aria-label="Dislike, ${review.dislikes} dislikes" onclick="dislikeReview(${review.id})">${icon("thumb_down", disliked ? "fill" : "")}${review.dislikes}</button>
             <button type="button" class="act" aria-label="Reply, ${replyCount} replies" aria-expanded="false" aria-controls="reply-${review.id}" onclick="toggleReply(${review.id})">${icon("chat_bubble")}${replyCount}</button>
-            <button type="button" class="act act-report" aria-label="Report post" title="Report post" onclick="reportReview(${review.id})">${icon("flag")}</button>
+            ${ownerActions}
         </div>
         <div class="thread${replyCount ? "" : " is-empty"}">
             ${repliesHTML}
             <form class="reply-box" id="reply-${review.id}" onsubmit="event.preventDefault(); sendReply(${review.id})">
+                <div class="reply-target hidden" id="replyTarget-${review.id}"></div>
                 <span class="avatar avatar-sm" style="background:${avatarColor(me)}" aria-hidden="true">${escapeHTML(initialsOf(me))}</span>
                 <div class="reply-field">
                     <input id="replyText-${review.id}" type="text" maxlength="1000" placeholder="Write a reply…" aria-label="Write a reply" autocomplete="off">
@@ -1329,13 +1337,17 @@ async function reactToReview(
    REPLY TOGGLE
 ========================================================= */
 
-function toggleReply(id) {
+function toggleReply(id, keepTarget) {
 
     const box =
         document.getElementById("reply-" + id);
 
     if (!box) {
         return;
+    }
+
+    if (!keepTarget) {
+        clearReplyTarget(id);
     }
 
     const open = box.classList.toggle("is-open");
@@ -1362,55 +1374,51 @@ async function sendReply(id) {
 
     if (!currentUser) {
 
-        alert(
-            "Please log in first."
-        );
+        showToast("Please log in first.");
 
         return;
     }
 
+    const input = document.getElementById("replyText-" + id);
 
-    const input =
-        document.getElementById(
-            "replyText-" + id
-        );
-
-
-    const text =
-        input.value.trim();
-
+    const text = input.value.trim();
 
     if (text === "") {
 
-        alert(
-            "Please write a reply."
-        );
+        showToast("Please write a reply.");
+
+        input.focus();
 
         return;
     }
 
+    const parentId = replyTargets[id] || null;
 
     try {
 
-        await api(
-            "/api/reviews/" + id + "/reply",
-            { text: text }
-        );
+        await api("/api/reviews/" + id + "/reply", {
+            text: text,
+            parent_id: parentId
+        });
 
     } catch (failure) {
 
-        alert(failure.message);
+        showToast(failure.message);
 
         return;
     }
 
+    clearReplyTarget(id);
 
     await loadReviews();
 
+    showToast("Your reply has been posted.", { tone: "success" });
 
-    alert(
-        "Your reply has been posted."
-    );
+    const node = document.getElementById("post-" + id);
+
+    if (node) {
+        node.querySelector(".thread").classList.remove("is-empty");
+    }
 }
 
 
@@ -1516,7 +1524,7 @@ function updateStatistics() {
 
         ratingTotal += review.rating;
 
-        replyTotal += review.replies.length;
+        replyTotal += review.replies.filter(reply => !reply.deleted).length;
 
         if (byArea[review.category]) {
             byArea[review.category].count += 1;
@@ -3006,4 +3014,336 @@ async function resolveReset(id, action) {
     );
 
     loadResetRequests();
+}
+
+
+/* =========================================================
+   THREADED REPLIES
+   Replies can answer other replies. Indenting stops after
+   three levels; deeper answers say who they're replying to.
+========================================================= */
+
+const REPLY_MAX_DEPTH = 3;
+
+// Which reply each post's reply box is answering (post id -> reply id)
+const replyTargets = {};
+
+
+function renderReplyTree(review) {
+
+    const children = {};
+
+    const byId = {};
+
+    review.replies.forEach(reply => {
+
+        byId[reply.id] = reply;
+
+        const key = reply.parent_id || 0;
+
+        (children[key] = children[key] || []).push(reply);
+    });
+
+    const isAdmin = !!(currentUser && currentUser.is_admin);
+
+    function node(reply, depth) {
+
+        const kids = (children[reply.id] || [])
+            .map(child => node(child, Math.min(depth + 1, REPLY_MAX_DEPTH)))
+            .join("");
+
+        const parent = reply.parent_id ? byId[reply.parent_id] : null;
+
+        // Past the indent limit, say who this answers
+        const answering = parent && depth >= REPLY_MAX_DEPTH && parent.username
+            ? ' <span class="reply-to">' + icon("subdirectory_arrow_right") + escapeHTML(parent.username) + "</span>"
+            : "";
+
+        let body;
+
+        if (reply.deleted) {
+
+            body =
+                '<span class="avatar avatar-sm avatar-gone" aria-hidden="true">' + icon("block") + "</span>" +
+                '<div class="reply-bubble is-deleted"><span class="reply-text">This reply was deleted.</span></div>';
+
+        } else {
+
+            const actions =
+                '<button type="button" class="reply-act" onclick="replyTo(' + review.id + ", " + reply.id + ')">' +
+                icon("reply") + "Reply</button>" +
+                (reply.mine || isAdmin
+                    ? '<button type="button" class="reply-act reply-act-delete" onclick="deleteReply(' + reply.id + ')">' +
+                      icon("delete") + "Delete</button>"
+                    : "");
+
+            body =
+                '<span class="avatar avatar-sm" style="background:' + avatarColor(reply.username) + '" aria-hidden="true">' +
+                escapeHTML(initialsOf(reply.username)) + "</span>" +
+                '<div class="reply-main">' +
+                '<div class="reply-bubble">' +
+                '<span class="reply-meta"><b>' + escapeHTML(reply.username) + "</b>" + answering +
+                (reply.date ? " <span>· " + escapeHTML(relTime(reply.date)) + "</span>" : "") +
+                "</span>" +
+                '<span class="reply-text">' + escapeHTML(reply.text) + "</span>" +
+                "</div>" +
+                '<div class="reply-actions">' + actions + "</div>" +
+                "</div>";
+        }
+
+        return '<div class="reply-node" id="replyNode-' + reply.id + '">' +
+            '<div class="reply">' + body + "</div>" +
+            (kids
+                ? '<div class="reply-children' + (depth >= REPLY_MAX_DEPTH ? " is-flat" : "") + '">' + kids + "</div>"
+                : "") +
+            "</div>";
+    }
+
+    return (children[0] || []).map(reply => node(reply, 1)).join("");
+}
+
+
+function replyTo(postId, replyId) {
+
+    const review = allReviews.find(item => item.id === postId);
+
+    const target = review && review.replies.find(item => item.id === replyId);
+
+    if (!target) {
+        return;
+    }
+
+    replyTargets[postId] = replyId;
+
+    const box = document.getElementById("reply-" + postId);
+
+    if (!box.classList.contains("is-open")) {
+        toggleReply(postId, true);
+    }
+
+    const pill = document.getElementById("replyTarget-" + postId);
+
+    pill.innerHTML =
+        icon("reply") + "<span>Replying to <b>" + escapeHTML(target.username) + "</b></span>" +
+        '<button type="button" aria-label="Cancel replying to ' + escapeAttr(target.username) +
+        '" onclick="clearReplyTarget(' + postId + ')">' + icon("close") + "</button>";
+
+    pill.classList.remove("hidden");
+
+    document.getElementById("replyText-" + postId).focus();
+}
+
+
+function clearReplyTarget(postId) {
+
+    delete replyTargets[postId];
+
+    const pill = document.getElementById("replyTarget-" + postId);
+
+    if (pill) {
+        pill.classList.add("hidden");
+        pill.innerHTML = "";
+    }
+}
+
+
+async function deleteReply(replyId) {
+
+    const ok = await confirmDialog({
+        title: "Delete this reply?",
+        body: "It will be removed for everyone. This can't be undone.",
+        confirm: "Delete reply"
+    });
+
+    if (!ok) {
+        return;
+    }
+
+    try {
+
+        await api("/api/replies/" + replyId + "/delete", {});
+
+    } catch (failure) {
+
+        showToast(failure.message);
+
+        return;
+    }
+
+    await loadReviews();
+
+    showToast("Reply deleted.", { tone: "success", icon: "delete" });
+}
+
+
+/* =========================================================
+   EDIT AND DELETE YOUR OWN POST
+   Editing reuses the compose dialog. The photo or video can
+   be removed but not swapped (delete and repost for that).
+========================================================= */
+
+let editingId = null;
+
+
+function editPost(id) {
+
+    const review = allReviews.find(item => item.id === id);
+
+    if (!review || !review.mine) {
+        return;
+    }
+
+    editingId = id;
+
+    chooseArea(review.category);
+
+    selectStar(Number(review.rating) || 0);
+
+    document.getElementById("reviewInput").value = review.text;
+
+    updateReviewCounter();
+
+    resetMediaPicker();
+
+    const hasMedia = !!(review.image || review.video);
+
+    document.getElementById("editRemoveMediaRow").classList.toggle("hidden", !hasMedia);
+
+    document.getElementById("editRemoveMedia").checked = false;
+
+    setComposeMode(true);
+
+    openModal("composeModal");
+}
+
+
+// Switch the compose dialog between "new post" and "edit post"
+function setComposeMode(editing) {
+
+    const modal = document.getElementById("composeModal");
+
+    modal.classList.toggle("is-editing", editing);
+
+    document.getElementById("composeTitle").textContent =
+        editing ? "Edit post" : "New feedback";
+
+    document.querySelector(".post-review-btn").innerHTML = editing
+        ? icon("check") + "Save changes"
+        : icon("send") + "Post feedback";
+
+    if (!editing) {
+        document.getElementById("editRemoveMediaRow").classList.add("hidden");
+    }
+}
+
+
+// Leaving edit mode clears the form so a new post starts empty
+function exitEditMode() {
+
+    if (editingId === null) {
+        return;
+    }
+
+    editingId = null;
+
+    document.getElementById("reviewInput").value = "";
+
+    updateReviewCounter();
+
+    selectStar(0);
+
+    setComposeMode(false);
+}
+
+
+async function saveEdit() {
+
+    const text = document.getElementById("reviewInput").value.trim();
+
+    if (selectedRating === 0) {
+
+        showToast("Please select a rating from 1 to 5 stars.");
+
+        return;
+    }
+
+    if (text === "") {
+
+        showToast("Please write your feedback.");
+
+        return;
+    }
+
+    const button = document.querySelector(".post-review-btn");
+
+    button.disabled = true;
+
+    try {
+
+        await api("/api/reviews/" + editingId + "/edit", {
+            category: document.getElementById("reviewCategory").value,
+            rating: selectedRating,
+            text: text,
+            remove_media: document.getElementById("editRemoveMedia").checked
+        });
+
+    } catch (failure) {
+
+        showToast(failure.message);
+
+        return;
+
+    } finally {
+
+        button.disabled = false;
+    }
+
+    const id = editingId;
+
+    exitEditMode();
+
+    closeModal("composeModal");
+
+    await loadReviews();
+
+    showToast("Post updated.", { tone: "success", icon: "edit" });
+
+    const card = document.getElementById("post-" + id);
+
+    if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+}
+
+
+async function deletePost(id) {
+
+    const review = allReviews.find(item => item.id === id);
+
+    const ok = await confirmDialog({
+        title: "Delete this post?",
+        body: review && !review.mine
+            ? "You're removing " + review.username + "'s post as an admin. Its likes and replies go with it. This can't be undone."
+            : "Its likes and replies will be deleted too. This can't be undone.",
+        confirm: "Delete post"
+    });
+
+    if (!ok) {
+        return;
+    }
+
+    try {
+
+        await api("/api/reviews/" + id + "/delete", {});
+
+    } catch (failure) {
+
+        showToast(failure.message);
+
+        return;
+    }
+
+    await loadReviews();
+
+    showToast("Post deleted.", { tone: "success", icon: "delete" });
 }
