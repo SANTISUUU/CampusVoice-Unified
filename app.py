@@ -60,7 +60,14 @@ SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "").strip()
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get(
     "SUPABASE_SERVICE_ROLE_KEY", ""
 ).strip()
-SUPABASE_SERVER_KEY = SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY
+# Prefer the current secret-key name, but retain every configured server key.
+# This matters during a Vercel key rotation: a stale SUPABASE_SECRET_KEY must
+# not make existing uploads impossible to read when the legacy service-role
+# key is still valid.
+SUPABASE_SERVER_KEYS = tuple(dict.fromkeys(
+    key for key in (SUPABASE_SECRET_KEY, SUPABASE_SERVICE_ROLE_KEY) if key
+))
+SUPABASE_SERVER_KEY = SUPABASE_SERVER_KEYS[0] if SUPABASE_SERVER_KEYS else ""
 
 SUPABASE_BUCKET = "CampusVoice-media"
 
@@ -80,6 +87,43 @@ supabase_client = (
     if SUPABASE_URL and SUPABASE_SERVER_KEY
     else None
 )
+
+
+def storage_clients():
+    """Yield the configured Supabase clients, trying rotated keys as needed."""
+
+    if supabase_client is not None:
+        yield supabase_client
+
+    for key in SUPABASE_SERVER_KEYS[1:]:
+        yield create_client(SUPABASE_URL, key)
+
+
+def signed_media_url(name, expires_in):
+    """Create a signed Storage link, including a valid rotated server key."""
+
+    last_error = None
+
+    for client in storage_clients():
+        try:
+            result = client.storage.from_(SUPABASE_BUCKET).create_signed_url(
+                name, expires_in
+            )
+            signed_url = (
+                result.get("signedURL")
+                or result.get("signedUrl")
+                or result.get("signed_url")
+            )
+
+            if signed_url:
+                return signed_url
+        except Exception as exc:
+            last_error = exc
+
+    if last_error is not None:
+        raise last_error
+
+    return None
 
 SECRET_PATH = os.path.join(BASE_DIR, ".secret_key")
 
@@ -685,28 +729,25 @@ def stored_media_info(url, kind):
     if supabase_client is None:
         return None
 
-    try:
-        info = supabase_client.storage.from_(
-            SUPABASE_BUCKET
-        ).info(name)
+    for client in storage_clients():
+        try:
+            info = client.storage.from_(SUPABASE_BUCKET).info(name)
 
-        metadata = info.get("metadata") or {}
-        raw_size = info.get("size") or metadata.get("size")
+            metadata = info.get("metadata") or {}
+            raw_size = info.get("size") or metadata.get("size")
 
-        if raw_size is None:
-            raw_size = metadata.get("contentLength")
+            if raw_size is None:
+                continue
 
-        if raw_size is None:
-            return None
+            return {
+                "name": name,
+                "size": int(raw_size),
+                "local_path": None,
+            }
+        except Exception:
+            continue
 
-        return {
-            "name": name,
-            "size": int(raw_size),
-            "local_path": None,
-        }
-
-    except Exception:
-        return None
+    return None
 
 
 @app.post("/api/media")
@@ -820,15 +861,7 @@ def serve_media(name):
             return error("Media storage is not configured.", 503)
 
         try:
-            result = supabase_client.storage.from_(
-                SUPABASE_BUCKET
-            ).create_signed_url(name, 3600)
-
-            signed_url = (
-                result.get("signedURL")
-                or result.get("signedUrl")
-                or result.get("signed_url")
-            )
+            signed_url = signed_media_url(name, 3600)
 
             if not signed_url:
                 return error("Not found.", 404)
